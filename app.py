@@ -1,68 +1,38 @@
-import gradio as gr
-from groq import Groq
-import edge_tts
-import asyncio
 import os
-import uuid
+from flask import Flask, request, jsonify, render_template
+from openai import OpenAI
 
-# এখানে আপনার API Key থাকবে (নিচে বলে দেব কোথায় দেবেন)
-client = Groq(api_key=os.environ.get("GROQ_KEY"))
+app = Flask(__name__)
 
-async def generate_voice(text):
-    filename = f"response_{uuid.uuid4()}.mp3"
-    communicate = edge_tts.Communicate(text, "bn-IN-TanishaaNeural", rate="-10%")
-    await communicate.save(filename)
-    return filename
+# এখানে তোমার API Key বসাবে। তবে সিকিউরিটির জন্য Environment Variable ভালো।
+# লোকাল টেস্টের জন্য সরাসরি বসাতে পারো, কিন্তু Render-এ Environment Variable ব্যবহার করবে।
+client = OpenAI(api_key="তোমার_API_KEY_এখানে_বসাও")
 
-def assistant(audio_file, text_input):
-    user_text = ""
-    
-    if audio_file:
-        try:
-            with open(audio_file, "rb") as file:
-                transcription = client.audio.transcriptions.create(
-                    file=(audio_file, file.read()),
-                    model="whisper-large-v3-turbo",
-                    language="bn",
-                    response_format="text"
-                )
-            user_text = transcription
-        except Exception as e:
-            return f"ভয়েস ইরর: {e}", None
-            
-    elif text_input:
-        user_text = text_input
-        
-    if not user_text:
-        return "বুঝতে পারছি না।", None
+@app.route('/')
+def home():
+    return render_template('index.html') # তোমার HTML ফাইল
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    # ইউজার যা লিখেছে তা নিচ্ছি
+    user_message = request.json.get('message')
 
     try:
-        completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": user_text}],
-            model="llama-3.1-8b-instant",
+        # OpenAI কে কল করছি (এখানেই ম্যাজিক আছে)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo", # এটি সস্তা এবং ফাস্ট
+            messages=[
+                {"role": "system", "content": "তুমি একজন বাংলা ভাষী স্মার্ট চ্যাটবট। তুমি সবসময় বাংলায় সুন্দর করে উত্তর দাও।"},
+                {"role": "user", "content": user_message}
+            ]
         )
-        reply = completion.choices[0].message.content
+        
+        # AI এর উত্তর বের করছি
+        bot_reply = response.choices[0].message.content
+        return jsonify({'reply': bot_reply})
+
     except Exception as e:
-        return f"AI ইরর: {e}", None
+        return jsonify({'reply': f"Error: {str(e)}"})
 
-    try:
-        voice_path = asyncio.run(generate_voice(reply))
-        return reply, voice_path
-    except Exception as e:
-        return f"ভয়েস ইরর: {e}", None
-
-demo = gr.Interface(
-    fn=assistant,
-    inputs=[
-        gr.Audio(sources=["microphone"], type="filepath", label="🎤 কথা বলুন"),
-        gr.Textbox(label="✍️ লিখুন")
-    ],
-    outputs=[
-        gr.Textbox(label="📝 উত্তর"),
-        gr.Audio(label="🔊 ভয়েস", autoplay=True)
-    ],
-    title="🤖 জার্ভিস"
-)
-
-if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+if __name__ == '__main__':
+    app.run(debug=True)

@@ -1,3 +1,2 @@
-gradio
-groq
-edge-tts
+flask
+openai
