@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart AI Assistant</title>
+    <style>
+        /* এখানে স্টাইল বা ডিজাইনের কোড আছে */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 600px;
+            background-color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .header {
+            background-color: #4a76a8;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            border-bottom: 2px solid #3a5a88;
+        }
+        /* চ্যাট বক্সের স্টাইল */
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #e5ddd5;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        /* মেসেজের স্টাইল */
+        .message {
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 80%;
+            font-size: 16px;
+            line-height: 1.4;
+            position: relative;
+        }
+        .user-msg {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+            text-align: right;
+        }
+        .bot-msg {
+            background-color: white;
+            align-self: flex-start;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        /* ইনপুট এরিয়া */
+        .input-area {
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+        #userInput {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 25px;
+            outline: none;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4a76a8;
+            color: white;
+            border: none;
+            padding: 0 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #3a5a88;
+        }
+        /* লোডিং অ্যানিমেশন */
+        .typing {
+            font-style: italic;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <!-- হেডার -->
+    <div class="header">
+        🤖 স্মার্ট AI অ্যাসিস্ট্যান্ট
+    </div>
+
+    <!-- চ্যাট দেখানোর জায়গা -->
+    <div class="chat-box" id="chatBox">
+        <div class="message bot-msg">
+            হ্যালো! আমি তোমার AI অ্যাসিস্ট্যান্ট। আজ তোমাকে কীভাবে সাহায্য করতে পারি?
+        </div>
+    </div>
+
+    <!-- ইনপুট নেওয়ার জায়গা -->
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="এখানে তোমার কথা লিখো...">
+        <button onclick="sendMessage()">পাঠাও</button>
+    </div>
+</div>
+
+<!-- জাভাস্ক্রিপ্ট কোড (ব্যাকএন্ডের সাথে যোগাযোগ করবে) -->
+<script>
+    function sendMessage() {
+        var input = document.getElementById('userInput');
+        var text = input.value.trim();
+        
+        if (text === "") return; // খালি মেসেজ পাঠাবে না
+
+        var chatBox = document.getElementById('chatBox');
+
+        // ১. ইউজারের মেসেজ দেখানো
+        var userDiv = document.createElement('div');
+        userDiv.className = 'message user-msg';
+        userDiv.innerText = text;
+        chatBox.appendChild(userDiv);
+
+        // ইনপুট ক্লিয়ার করা
+        input.value = "";
+
+        // স্ক্রল নিচে নামানো
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // ২. বটের "টাইপিং..." দেখানো (লোডিং)
+        var botDiv = document.createElement('div');
+        botDiv.className = 'message bot-msg typing';
+        botDiv.innerText = "টাইপ করছে...";
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // ৩. ব্যাকএন্ডে ডাটা পাঠানো (Fetch API)
+        fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: text })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // লোডিং টেক্সট সরিয়ে আসল উত্তর দেখানো
+            botDiv.innerText = data.reply;
+            botDiv.classList.remove('typing');
+            chatBox.scrollTop = chatBox.scrollHeight;
+        })
+        .catch(error => {
+            // এরর হলে
+            botDiv.innerText = "সরি, সার্ভারে কিছু সমস্যা হয়েছে।";
+            botDiv.style.color = "red";
+        });
+    }
+
+    // এন্টার বাটন প্রেস করলেও মেসেজ যাবে
+    document.getElementById("userInput").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    });
+</script>
+
+</body>
+</html>
