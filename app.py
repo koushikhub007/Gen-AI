@@ -4,25 +4,28 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# এখানে তোমার API Key বসাবে। তবে সিকিউরিটির জন্য Environment Variable ভালো।
-# লোকাল টেস্টের জন্য সরাসরি বসাতে পারো, কিন্তু Render-এ Environment Variable ব্যবহার করবে।
-client = OpenAI(api_key="তোমার_API_KEY_এখানে_বসাও")
+# ১. এখানে Environment Variable থেকে Key নিচ্ছি। 
+# Render-এ গিয়ে Environment Variable নাম দিয়ে 'OPENAI_API_KEY' এবং Value তে তোমার Key দিতে হবে।
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+# ২. হোম পেজের জন্য Route
 @app.route('/')
 def home():
-    return render_template('index.html') # তোমার HTML ফাইল
+    return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    # ইউজার যা লিখেছে তা নিচ্ছি
     user_message = request.json.get('message')
 
     try:
-        # OpenAI কে কল করছি (এখানেই ম্যাজিক আছে)
+        # OpenAI API Call
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo", # এটি সস্তা এবং ফাস্ট
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "তুমি একজন বাংলা ভাষী স্মার্ট চ্যাটবট। তুমি সবসময় বাংলায় সুন্দর করে উত্তর দাও।"},
+                {
+                    "role": "system", 
+                    "content": "You are a helpful and intelligent assistant. You must detect the language of the user's input and reply in the EXACT SAME language. If the user types in Bengali, reply in Bengali. If English, reply in English. Maintain the tone and language of the user."
+                },
                 {"role": "user", "content": user_message}
             ]
         )
@@ -32,9 +35,9 @@ def chat():
         return jsonify({'reply': bot_reply})
 
     except Exception as e:
-        return jsonify({'reply': f"Error: {str(e)}"})
-
-import os
+        # এরর হলে কনসোলে দেখাবে
+        print(f"Error: {e}")
+        return jsonify({'reply': "দুঃখিত, আমি এই মুহূর্তে উত্তর দিতে পারছি না।"})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
