@@ -18,9 +18,9 @@ def chat():
         return jsonify({'reply': "কিছু লিখুন..."})
 
     try:
-        # মডেল সেটআপ
+        # মডেল সেটআপ - এখানে নাম পরিবর্তন করা হয়েছে
         model = genai.GenerativeModel(
-            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
             system_instruction=(
                 "You are a helpful assistant. "
                 "Reply in the same language the user uses. "
@@ -34,6 +34,7 @@ def chat():
         return jsonify({'reply': response.text})
 
     except Exception as e:
+        # স্পেসিফিক এরর মেসেজ দেখাবে
         return jsonify({'reply': f"Error: {str(e)}"})
 
 if __name__ == '__main__':
