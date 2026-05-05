@@ -4,11 +4,9 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# ১. এখানে Environment Variable থেকে Key নিচ্ছি। 
-# Render-এ গিয়ে Environment Variable নাম দিয়ে 'OPENAI_API_KEY' এবং Value তে তোমার Key দিতে হবে।
+# Render থেকে API Key নিচ্ছে
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-# ২. হোম পেজের জন্য Route
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -24,20 +22,22 @@ def chat():
             messages=[
                 {
                     "role": "system", 
-                    "content": "You are a helpful and intelligent assistant. You must detect the language of the user's input and reply in the EXACT SAME language. If the user types in Bengali, reply in Bengali. If English, reply in English. Maintain the tone and language of the user."
+                    "content": """You are a helpful assistant. 
+                    STRICT RULE: You MUST reply in the EXACT SAME language the user uses.
+                    - If user writes in English, you MUST reply in English.
+                    - If user writes in Bengali, you MUST reply in Bengali.
+                    - Do not translate. Do not change the language."""
                 },
                 {"role": "user", "content": user_message}
             ]
         )
         
-        # AI এর উত্তর বের করছি
         bot_reply = response.choices[0].message.content
         return jsonify({'reply': bot_reply})
 
     except Exception as e:
-        # এরর হলে কনসোলে দেখাবে
         print(f"Error: {e}")
-        return jsonify({'reply': "দুঃখিত, আমি এই মুহূর্তে উত্তর দিতে পারছি না।"})
+        return jsonify({'reply': "Sorry, there was an error."})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
