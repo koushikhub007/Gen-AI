@@ -5,7 +5,7 @@ from google.genai import types
 
 app = Flask(__name__)
 
-# নতুন Client তৈরি করছি
+# Gemini Client তৈরি
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/')
@@ -20,9 +20,9 @@ def chat():
         return jsonify({'reply': "কিছু লিখুন..."})
 
     try:
-        # নতুন API কলের নিয়ম
+        # নতুন API কল (মডেলের নাম ঠিক করা হয়েছে)
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-1.5-flash-latest", 
             contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=(
@@ -44,4 +44,3 @@ def chat():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
