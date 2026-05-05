@@ -4,7 +4,7 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# Groq API Setup (OpenAI SDK ব্যবহার করে)
+# Groq API Setup
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=os.environ.get("GROQ_API_KEY")
@@ -22,9 +22,9 @@ def chat():
         return jsonify({'reply': "কিছু লিখুন..."})
 
     try:
-        # Groq এর জন্য মডেল: llama3-8b-8192 (এটি ফ্রি এবং দ্রুত)
+        # নতুন মডেল: llama-3.1-8b-instant (এটি বর্তমানে সবচেয়ে ফাস্ট এবং ফ্রি)
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[
                 {
                     "role": "system", 
