@@ -35,8 +35,8 @@ def chat():
         bot_reply = response.choices[0].message.content
         return jsonify({'reply': bot_reply})
 
-        except Exception as e:
-        # আগে এখানে শুধু "Sorry" লেখা ছিল, এখন আসল এররটা দেখাবে
+    except Exception as e:
+        # এখানে আসল এররটা দেখাবে যাতে বুঝতে পারো সমস্যা কোথায়
         return jsonify({'reply': f"Error: {str(e)}"})
 
 if __name__ == '__main__':
