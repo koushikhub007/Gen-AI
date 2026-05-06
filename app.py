@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+import urllib.parse
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,12 +10,27 @@ from bson.objectid import ObjectId
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- MongoDB Setup ---
-MONGO_URI = os.environ.get("MONGO_URI")
+# --- MongoDB Setup (Smart Way) ---
+# আমরা পাসওয়ার্ড এবং ইউজারনেম আলাদা ভ্যারিয়েবল নিয়ে নিচ্ছি
+MONGO_USER = os.environ.get("MONGO_USER")
+MONGO_PASS = os.environ.get("MONGO_PASS")
+MONGO_CLUSTER = os.environ.get("MONGO_CLUSTER") # যেমন: cluster0.xxxxx.mongodb.net
+
+# এখানে ম্যাজিক হবে - পাসওয়ার্ড অটোমেটিক এনকোড হয়ে যাবে
+if MONGO_USER and MONGO_PASS and MONGO_CLUSTER:
+    escaped_user = urllib.parse.quote_plus(MONGO_USER)
+    escaped_pass = urllib.parse.quote_plus(MONGO_PASS)
+    MONGO_URI = f"mongodb+srv://{escaped_user}:{escaped_pass}@{MONGO_CLUSTER}/?retryWrites=true&w=majority"
+else:
+    # যদি কেউ পুরো URI দিয়ে থাকে (অল্টিমেট অপশন)
+    MONGO_URI = os.environ.get("MONGO_URI")
+
 client_db = MongoClient(MONGO_URI)
 db = client_db["gen_ai_db"]
 users_col = db["users"]
 chats_col = db["chats"]
+
+# ... বাকি কোড আগের মতোই থাকবে ...
 
 # --- Flask-Login Setup ---
 login_manager = LoginManager()
