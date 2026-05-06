@@ -5,12 +5,27 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
 import uuid
+# নতুন লাইন যোগ করুন
+from urllib.parse import quote_plus
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_default_secret_key_here')
 
 # --- Database Setup (MongoDB) ---
-MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/gen_ai_db')
+# আলাদা আলাদা Environment Variable নিন
+MONGO_USER = os.environ.get('MONGO_USER')
+MONGO_PASS = os.environ.get('MONGO_PASS')
+MONGO_CLUSTER = os.environ.get('MONGO_CLUSTER') # যেমন: cluster0.abcde.mongodb.net
+
+# Password এবং Username Encode করুন
+if MONGO_USER and MONGO_PASS and MONGO_CLUSTER:
+    escaped_user = quote_plus(MONGO_USER)
+    escaped_pass = quote_plus(MONGO_PASS)
+    MONGO_URI = f"mongodb+srv://{escaped_user}:{escaped_pass}@{MONGO_CLUSTER}/?retryWrites=true&w=majority"
+else:
+    # Local testing এর জন্য fallback
+    MONGO_URI = 'mongodb://localhost:27017/gen_ai_db'
+
 client = MongoClient(MONGO_URI)
 db = client.get_database()
 users_collection = db.users
