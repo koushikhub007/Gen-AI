@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gemini Chat</title>
+  <title>Gen Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -918,7 +918,7 @@
       <div style="display: flex; align-items: center; gap: 10px;">
         <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;">G</div>
         <div>
-          <div style="font-weight: 600; font-size: 16px;">Gemini</div>
+          <div style="font-weight: 600; font-size: 16px;">Gen</div>
           <div style="font-size: 10px; color: var(--text-muted);">AI Assistant</div>
         </div>
       </div>
@@ -1003,7 +1003,7 @@
           </svg>
         </button>
         <div class="header-title-group">
-          <h1 class="header-title">Gemini</h1>
+          <h1 class="header-title">Gen</h1>
           <p class="header-subtitle">AI Assistant</p>
         </div>
       </div>
@@ -1047,7 +1047,7 @@
         <textarea
           class="input-field"
           id="messageInput"
-          placeholder="Ask Gemini..."
+          placeholder="Ask Gen AI..."
           rows="1"
         ></textarea>
 
@@ -1333,7 +1333,7 @@
     // ==================== Chat History ====================
     function loadChatHistory() {
       try {
-        const saved = localStorage.getItem('gemini_chat_history');
+        const saved = localStorage.getItem('Gen_chat_history');
         if (saved) {
           state.chatHistory = JSON.parse(saved);
           renderSidebarHistory();
@@ -1345,7 +1345,7 @@
 
     function saveChatHistory() {
       try {
-        localStorage.setItem('gemini_chat_history', JSON.stringify(state.chatHistory));
+        localStorage.setItem('Gen_chat_history', JSON.stringify(state.chatHistory));
       } catch (e) {
         console.error('Error saving history:', e);
       }
@@ -1664,7 +1664,7 @@
       generateResponse(newContent);
     }
 
-            // ==================== AI Response (Backend Connection) ====================
+    // ==================== AI Response ====================
     function generateResponse(userText) {
       state.isGenerating = true;
       
@@ -1674,58 +1674,69 @@
       
       scrollToBottom();
 
-      // Python Backend এ API Call
-      fetch('/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: userText,
-          model: state.currentModel.id // UI থেকে fast/thinking/pro আসছে
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        state.isGenerating = false;
-        if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible');
-        if (dom.sendBtn) dom.sendBtn.style.display = 'flex';
-        if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
+      const delay = state.currentModel.id === 'fast' ? 800 : 
+                    state.currentModel.id === 'thinking' ? 2000 : 3500;
 
-        if (data.reply) {
-          const aiMessage = {
-            id: generateId(),
-            role: 'ai',
-            content: data.reply,
-            timestamp: Date.now()
-          };
-          state.messages.push(aiMessage);
-          renderMessages();
-          updateUI();
-        } else {
-          alert("Error from server: " + (data.error || "Unknown error"));
+      setTimeout(() => {
+        if (state.isGenerating) {
+          completeGeneration(userText);
         }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        state.isGenerating = false;
-        if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible');
-        if (dom.sendBtn) dom.sendBtn.style.display = 'flex';
-        if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
-        alert("Connection failed. Please check backend.");
-      });
+      }, delay);
+    }
+
+    function completeGeneration(userText) {
+      const response = generateAIResponse(userText);
+      
+      const aiMessage = {
+        id: generateId(),
+        role: 'ai',
+        content: response,
+        timestamp: Date.now()
+      };
+      
+      state.messages.push(aiMessage);
+      state.isGenerating = false;
+      
+      if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible');
+      if (dom.sendBtn) dom.sendBtn.style.display = 'flex';
+      if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
+      
+      renderMessages();
+      updateUI();
     }
 
     function stopGeneration() {
       state.isGenerating = false;
-      // Note: Fetch API request cancellation is complex, 
-      // here we just reset the UI state.
+      
       if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible');
       if (dom.sendBtn) dom.sendBtn.style.display = 'flex';
       if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
     }
 
-    
+    function generateAIResponse(userText) {
+      const responses = {
+        default: `I understand your question about "${userText.substring(0, 40)}..."\n\nBased on the ${state.currentModel.name} model analysis:\n\n1. This is a simulated response\n2. In production, this would connect to Gen API\n3. Response would be contextual and intelligent\n\nWould you like me to elaborate on anything specific?`,
+        
+        image: `I'd help create an image based on your description.\n\nStyle: Modern and artistic\nColor palette: Warm tones\nComposition: Balanced\n\nNote: Connect to Gen API for actual image generation.`,
+        
+        code: `Here's the code you requested:\n\n\`\`\`python\ndef greet(name):\n    return f"Hello, {name}!"\n\nprint(greet("World"))\n\`\`\`\n\nLet me know if you need modifications!`,
+        
+        explain: `Great question! Let me explain:\n\n**Key Points:**\n- Understanding the fundamentals\n- Exploring the details\n- Practical applications\n\nWould you like more details?`
+      };
+
+      const lowerText = userText.toLowerCase();
+      
+      if (lowerText.includes('image') || lowerText.includes('create') || lowerText.includes('generate')) {
+        return responses.image;
+      } else if (lowerText.includes('code') || lowerText.includes('script') || lowerText.includes('program')) {
+        return responses.code;
+      } else if (lowerText.includes('explain') || lowerText.includes('what is') || lowerText.includes('how does')) {
+        return responses.explain;
+      }
+      
+      return responses.default;
+    }
+
     // ==================== New Chat ====================
     function startNewChat() {
       state.messages = [];
