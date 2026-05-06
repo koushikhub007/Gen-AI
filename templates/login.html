@@ -5,16 +5,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Gen AI</title>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; background: #0a0a0f; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-    .auth-box { background: #16161f; padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); }
-    h2 { text-align: center; color: #6366f1; margin-bottom: 30px; }
-    input { width: 100%; padding: 15px; margin-bottom: 15px; background: #0a0a0f; border: 1px solid #2a2a3a; border-radius: 10px; color: white; font-size: 16px; outline: none; }
-    input:focus { border-color: #6366f1; }
-    button { width: 100%; padding: 15px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-    button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4); }
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-card: #1a1a24;
+      --border-color: #2a2a3a;
+      --text-primary: #f0f0f5;
+      --text-muted: #606070;
+      --accent: #6366f1;
+      --danger: #ef4444;
+    }
+    body { 
+      font-family: 'Segoe UI', sans-serif; 
+      background: var(--bg-primary); 
+      color: var(--text-primary); 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      height: 100vh; 
+      margin: 0; 
+    }
+    .auth-box { 
+      background: var(--bg-card); 
+      padding: 40px; 
+      border-radius: 20px; 
+      width: 100%; 
+      max-width: 400px; 
+      border: 1px solid var(--border-color);
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.1); 
+    }
+    h2 { text-align: center; color: var(--accent); margin-bottom: 30px; font-size: 24px; }
+    input { 
+      width: 100%; 
+      padding: 15px; 
+      margin-bottom: 15px; 
+      background: var(--bg-primary); 
+      border: 1px solid var(--border-color); 
+      border-radius: 10px; 
+      color: var(--text-primary); 
+      font-size: 16px; 
+      outline: none; 
+      transition: border-color 0.3s;
+    }
+    input:focus { border-color: var(--accent); }
+    button { 
+      width: 100%; 
+      padding: 15px; 
+      background: linear-gradient(135deg, #6366f1, #8b5cf6); 
+      border: none; 
+      border-radius: 10px; 
+      color: white; 
+      font-size: 16px; 
+      font-weight: bold; 
+      cursor: pointer; 
+      transition: 0.3s; 
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(99, 102, 241, 0.4); }
     .switch { text-align: center; margin-top: 20px; color: #888; font-size: 14px; }
-    .switch a { color: #6366f1; text-decoration: none; font-weight: bold; cursor: pointer; }
-    .error { color: #ef4444; text-align: center; margin-bottom: 15px; font-size: 14px; display: none; }
+    .switch a { color: var(--accent); text-decoration: none; font-weight: bold; cursor: pointer; }
+    .error { color: var(--danger); text-align: center; margin-bottom: 15px; font-size: 14px; display: none; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;}
   </style>
 </head>
 <body>
@@ -26,10 +74,10 @@
   <form id="authForm">
     <input type="text" id="username" placeholder="Username" required>
     <input type="password" id="password" placeholder="Password" required>
-    <button type="submit">Login</button>
+    <button type="submit" id="submitBtn">Login</button>
   </form>
 
-  <div class="switch">
+  <div class="switch" id="switchText">
     Don't have an account? <a onclick="toggleForm()">Sign Up</a>
   </div>
 </div>
@@ -39,12 +87,20 @@
 
   function toggleForm() {
     isLogin = !isLogin;
-    document.getElementById('formTitle').innerText = isLogin ? "Login" : "Sign Up";
-    document.querySelector('button').innerText = isLogin ? "Login" : "Sign Up";
-    document.querySelector('.switch a').innerText = isLogin ? "Sign Up" : "Login";
-    document.querySelector('.switch').innerHTML = isLogin 
-      ? "Don't have an account? <a onclick='toggleForm()'>Sign Up</a>" 
-      : "Already have an account? <a onclick='toggleForm()'>Login</a>";
+    const title = document.getElementById('formTitle');
+    const btn = document.getElementById('submitBtn');
+    const switchText = document.getElementById('switchText');
+    
+    title.innerText = isLogin ? "Login" : "Sign Up";
+    btn.innerText = isLogin ? "Login" : "Sign Up";
+    
+    if (isLogin) {
+        switchText.innerHTML = "Don't have an account? <a onclick='toggleForm()'>Sign Up</a>";
+    } else {
+        switchText.innerHTML = "Already have an account? <a onclick='toggleForm()'>Login</a>";
+    }
+    
+    document.getElementById('errorBox').style.display = 'none';
   }
 
   document.getElementById('authForm').addEventListener('submit', async (e) => {
