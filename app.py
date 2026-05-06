@@ -26,7 +26,6 @@ try:
     if MONGO_USER and MONGO_PASS and MONGO_CLUSTER:
         escaped_user = quote_plus(MONGO_USER)
         escaped_pass = quote_plus(MONGO_PASS)
-        # এখানে ভুল লিখলে কানেক্ট হবে না
         MONGO_URI = f"mongodb+srv://{escaped_user}:{escaped_pass}@{MONGO_CLUSTER}/{DB_NAME}?retryWrites=true&w=majority"
         
         client_db = MongoClient(MONGO_URI)
@@ -40,7 +39,6 @@ except Exception as e:
     print(f"MongoDB Connection Error: {e}")
 
 # --- Groq Setup ---
-# Groq API Key সঠিকভাবে দিন
 groq_key = os.environ.get("GROQ_API_KEY")
 client = None
 if groq_key:
@@ -49,7 +47,7 @@ if groq_key:
         api_key=groq_key
     )
 else:
-    print("WARNING: GROQ_API_KEY is missing. AI will not work.")
+    print("WARNING: GROQ_API_KEY is missing.")
 
 # --- Login Manager ---
 login_manager = LoginManager()
@@ -58,17 +56,16 @@ login_manager.login_view = 'login_page'
 
 class User(UserMixin):
     def __init__(self, user_doc):
+        # ID কে স্ট্রিং হিসেবে নিচ্ছি
         self.id = str(user_doc['_id'])
         self.username = user_doc['username']
 
     @staticmethod
     def get(user_id):
         if users_collection is None: return None
-        try:
-            user_doc = users_collection.find_one({'_id': uuid.UUID(user_id)})
-            return User(user_doc) if user_doc else None
-        except:
-            return None
+        # যেহেতু ID স্ট্রিং আকারে সেভ করা হচ্ছে, তাই সরাসরি খুঁজব
+        user_doc = users_collection.find_one({'_id': user_id})
+        return User(user_doc) if user_doc else None
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -111,8 +108,11 @@ def api_signup():
     if users_collection.find_one({'username': username}):
         return jsonify({'success': False, 'message': 'User already exists'}), 400
     
+    # সহজ স্ট্রিং আইডি তৈরি করছি (UUID এর জটিলতা সরিয়ে)
+    user_id = str(uuid.uuid4())
+    
     users_collection.insert_one({
-        '_id': uuid.uuid4(),
+        '_id': user_id,
         'username': username,
         'password': generate_password_hash(password)
     })
