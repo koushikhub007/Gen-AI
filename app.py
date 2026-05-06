@@ -56,14 +56,12 @@ login_manager.login_view = 'login_page'
 
 class User(UserMixin):
     def __init__(self, user_doc):
-        # ID কে স্ট্রিং হিসেবে নিচ্ছি
         self.id = str(user_doc['_id'])
         self.username = user_doc['username']
 
     @staticmethod
     def get(user_id):
         if users_collection is None: return None
-        # যেহেতু ID স্ট্রিং আকারে সেভ করা হচ্ছে, তাই সরাসরি খুঁজব
         user_doc = users_collection.find_one({'_id': user_id})
         return User(user_doc) if user_doc else None
 
@@ -76,7 +74,8 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def index():
-    return render_template('chat.html', username=current_user.username)
+    # এখানে index.html ব্যবহার করা হচ্ছে
+    return render_template('index.html', username=current_user.username)
 
 @app.route('/login')
 def login_page():
@@ -108,9 +107,7 @@ def api_signup():
     if users_collection.find_one({'username': username}):
         return jsonify({'success': False, 'message': 'User already exists'}), 400
     
-    # সহজ স্ট্রিং আইডি তৈরি করছি (UUID এর জটিলতা সরিয়ে)
     user_id = str(uuid.uuid4())
-    
     users_collection.insert_one({
         '_id': user_id,
         'username': username,
@@ -128,7 +125,7 @@ def logout():
 @login_required
 def chat():
     if client is None:
-        return jsonify({'reply': "AI Service is not configured (Missing API Key)."})
+        return jsonify({'reply': "AI Service is not configured."})
 
     data = request.json
     try:
