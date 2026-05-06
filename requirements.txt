@@ -3,3 +3,5 @@ openai
 gunicorn
 pymongo
 dnspython
+flask-login
+werkzeug
