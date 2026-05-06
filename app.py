@@ -1,6 +1,14 @@
+ঠিক আছে, বুঝেছি। এটা খুঁজে পাওয়া একটু কঠিন হতে পারে। আমরা একটি **সহজ উপায়** ব্যবহার করব। তুমি আগে যে **পুরো লিংকটি (Full Connection String)** কপি করেছিলে, সেটিই আবার ব্যবহার করব। আমরা কোডে লিখব যেন সেটি নিজে নিজে ঠিক হয়ে যায়।
+
+তুমি শুধু **১টি জিনিস করবে:**
+
+### ধাপ ১: `app.py` ফাইলের কোড বদলাও
+GitHub-এ গিয়ে `app.py` ফাইলের সব কোড মুছে নিচের কোডটি বসাও। এই কোডটি পাসওয়ার্ডের স্পেশাল ক্যারেক্টার (@, # ইত্যাদি) অটোমেটিক ঠিক করে নেবে।
+
+```python
 import os
 import urllib.parse
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_from
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
@@ -10,29 +18,34 @@ from bson.objectid import ObjectId
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- MongoDB Setup (Smart Way) ---
-# আমরা পাসওয়ার্ড এবং ইউজারনেম আলাদা ভ্যারিয়েবল নিয়ে নিচ্ছি
-MONGO_USER = os.environ.get("MONGO_USER")
-MONGO_PASS = os.environ.get("MONGO_PASS")
-MONGO_CLUSTER = os.environ.get("MONGO_CLUSTER") # যেমন: cluster0.xxxxx.mongodb.net
+# --- Database Connection (Auto Fix) ---
+# তুমি শুধু MONGO_URI দিয়ে দিবে, বাকি কাজ কোড করবে
+MONGO_URI = os.environ.get("MONGO_URI")
 
-# এখানে ম্যাজিক হবে - পাসওয়ার্ড অটোমেটিক এনকোড হয়ে যাবে
-if MONGO_USER and MONGO_PASS and MONGO_CLUSTER:
-    escaped_user = urllib.parse.quote_plus(MONGO_USER)
-    escaped_pass = urllib.parse.quote_plus(MONGO_PASS)
-    MONGO_URI = f"mongodb+srv://{escaped_user}:{escaped_pass}@{MONGO_CLUSTER}/?retryWrites=true&w=majority"
+if MONGO_URI:
+    try:
+        # URI ভেঙ্গে ইউজার এবং পাসওয়ার্ড বের করছি
+        parsed = urllib.parse.urlparse(MONGO_URI)
+        username = urllib.parse.quote_plus(parsed.username)
+        password = urllib.parse.quote_plus(parsed.password)
+        host = parsed.hostname
+        
+        # নতুন করে ঠিক করা URI তৈরি করছি
+        safe_uri = f"{parsed.scheme}://{username}:{password}@{host}{parsed.path}?retryWrites=true&w=majority"
+        
+        client_db = MongoClient(safe_uri)
+        print("Database Connected!")
+    except Exception as e:
+        print("Database Connection Error:", e)
+        client_db = None
 else:
-    # যদি কেউ পুরো URI দিয়ে থাকে (অল্টিমেট অপশন)
-    MONGO_URI = os.environ.get("MONGO_URI")
+    client_db = None
 
-client_db = MongoClient(MONGO_URI)
 db = client_db["gen_ai_db"]
 users_col = db["users"]
 chats_col = db["chats"]
 
-# ... বাকি কোড আগের মতোই থাকবে ...
-
-# --- Flask-Login Setup ---
+# --- Login Setup ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login_page'
@@ -44,10 +57,9 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
+    if not client_db: return None
     user_doc = users_col.find_one({"_id": ObjectId(user_id)})
-    if user_doc:
-        return User(user_doc)
-    return None
+    return User(user_doc) if user_doc else None
 
 # --- Groq Setup ---
 client = OpenAI(
@@ -70,27 +82,19 @@ def login_page():
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    
-    user = users_col.find_one({"username": username})
-    if user and check_password_hash(user['password'], password):
-        user_obj = User(user)
-        login_user(user_obj)
+    user = users_col.find_one({"username": data.get('username')})
+    if user and check_password_hash(user['password'], data.get('password')):
+        login_user(User(user))
         return jsonify({"success": True})
-    return jsonify({"success": False, "message": "Invalid username or password"})
+    return jsonify({"success": False, "message": "Invalid credentials"})
 
 @app.route('/api/signup', methods=['POST'])
 def api_signup():
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    
-    if users_col.find_one({"username": username}):
-        return jsonify({"success": False, "message": "Username already exists"})
-    
-    hashed_pw = generate_password_hash(password)
-    users_col.insert_one({"username": username, "password": hashed_pw})
+    if users_col.find_one({"username": data.get('username')}):
+        return jsonify({"success": False, "message": "User exists"})
+    hashed_pw = generate_password_hash(data.get('password'))
+    users_col.insert_one({"username": data.get('username'), "password": hashed_pw})
     return jsonify({"success": True})
 
 @app.route('/logout')
@@ -103,39 +107,4 @@ def logout():
 @login_required
 def chat():
     data = request.json
-    user_message = data.get('message')
-    model_type = data.get('model', 'thinking')
-
-    model_mapping = {
-        'thinking': 'llama-3.3-70b-versatile',
-        'pro': 'llama-3.3-70b-versatile'
-    }
-    selected_model = model_mapping.get(model_type, 'llama-3.3-70b-versatile')
-
-    try:
-        response = client.chat.completions.create(
-            model=selected_model,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_message}
-            ]
-        )
-        
-        bot_reply = response.choices[0].message.content
-
-        # Save to Database
-        chats_col.insert_one({
-            "user_id": current_user.id,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "user_message": user_message,
-            "bot_reply": bot_reply
-        })
-        
-        return jsonify({'reply': bot_reply})
-
-    except Exception as e:
-        return jsonify({'reply': f"Error: {str(e)}"})
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    model_map = {'thinking': 'llama-3.3-70b-versatile', 'pro': '
