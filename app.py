@@ -1,14 +1,6 @@
-ঠিক আছে, বুঝেছি। এটা খুঁজে পাওয়া একটু কঠিন হতে পারে। আমরা একটি **সহজ উপায়** ব্যবহার করব। তুমি আগে যে **পুরো লিংকটি (Full Connection String)** কপি করেছিলে, সেটিই আবার ব্যবহার করব। আমরা কোডে লিখব যেন সেটি নিজে নিজে ঠিক হয়ে যায়।
-
-তুমি শুধু **১টি জিনিস করবে:**
-
-### ধাপ ১: `app.py` ফাইলের কোড বদলাও
-GitHub-এ গিয়ে `app.py` ফাইলের সব কোড মুছে নিচের কোডটি বসাও। এই কোডটি পাসওয়ার্ডের স্পেশাল ক্যারেক্টার (@, # ইত্যাদি) অটোমেটিক ঠিক করে নেবে।
-
-```python
 import os
 import urllib.parse
-from flask import Flask, request, jsonify, render_template, redirect, url_from
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
@@ -18,27 +10,27 @@ from bson.objectid import ObjectId
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Database Connection (Auto Fix) ---
-# তুমি শুধু MONGO_URI দিয়ে দিবে, বাকি কাজ কোড করবে
+# --- Database Connection (Auto Fix Magic) ---
 MONGO_URI = os.environ.get("MONGO_URI")
 
 if MONGO_URI:
     try:
-        # URI ভেঙ্গে ইউজার এবং পাসওয়ার্ড বের করছি
+        # URI থেকে ইউজার এবং পাসওয়ার্ড আলাদা করছি
         parsed = urllib.parse.urlparse(MONGO_URI)
         username = urllib.parse.quote_plus(parsed.username)
         password = urllib.parse.quote_plus(parsed.password)
         host = parsed.hostname
         
-        # নতুন করে ঠিক করা URI তৈরি করছি
+        # ঠিক করা নতুন URI তৈরি করছি
         safe_uri = f"{parsed.scheme}://{username}:{password}@{host}{parsed.path}?retryWrites=true&w=majority"
         
         client_db = MongoClient(safe_uri)
-        print("Database Connected!")
+        print("Database Connected Successfully!")
     except Exception as e:
         print("Database Connection Error:", e)
         client_db = None
 else:
+    print("MONGO_URI not found!")
     client_db = None
 
 db = client_db["gen_ai_db"]
@@ -107,4 +99,18 @@ def logout():
 @login_required
 def chat():
     data = request.json
-    model_map = {'thinking': 'llama-3.3-70b-versatile', 'pro': '
+    model_map = {'thinking': 'llama-3.3-70b-versatile', 'pro': 'llama-3.3-70b-versatile'}
+    try:
+        res = client.chat.completions.create(
+            model=model_map.get(data.get('model'), 'llama-3.3-70b-versatile'),
+            messages=[{"role": "user", "content": data.get('message')}]
+        )
+        reply = res.choices[0].message.content
+        chats_col.insert_one({"user_id": current_user.id, "msg": data.get('message'), "reply": reply})
+        return jsonify({'reply': reply})
+    except Exception as e:
+        return jsonify({'reply': f"Error: {str(e)}"})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
