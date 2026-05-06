@@ -642,7 +642,7 @@
       border-radius: 18px;
       padding: 10px 14px;
       display: flex;
-      align-items: flex-end;
+      align-items:center;
       gap: 10px;
       transition: all 0.3s ease;
     }
@@ -1064,46 +1064,49 @@
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
-            <div class="model-dropdown" id="modelDropdown">
-              <div class="model-option selected" data-model="fast">
-                <div class="model-option-icon fast">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                  </svg>
-                </div>
-                <div class="model-option-info">
-                  <h4>Fast</h4>
-                  <p>Answers quickly</p>
-                </div>
-              </div>
-              <div class="model-option" data-model="thinking">
-                <div class="model-option-icon thinking">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                  </svg>
-                </div>
-                <div class="model-option-info">
-                  <h4>Thinking</h4>
-                  <p>Solves complex problems</p>
-                </div>
-              </div>
-              <div class="model-option" data-model="pro">
-                <div class="model-option-icon pro">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                  </svg>
-                </div>
-                <div class="model-option-info">
-                  <h4>Pro</h4>
-                  <p>Advanced maths and code</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Stop Button -->
+<div class="input-actions">
+  <!-- Model Selector -->
+  <div class="model-selector">
+    <button class="model-btn" id="modelBtn">
+      <!-- ডিফল্ট নাম "Thinking" করা হলো -->
+      <span id="selectedModelName">Thinking</span> 
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+    <div class="model-dropdown" id="modelDropdown">
+      <!-- Fast অপশনটি সরিয়ে দেওয়া হয়েছে -->
+      
+      <!-- Thinking কে ডিফল্ট সিলেক্টেড করা হলো -->
+      <div class="model-option selected" data-model="thinking">
+        <div class="model-option-icon thinking">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <div class="model-option-info">
+          <h4>Thinking</h4>
+          <p>Solves complex problems</p>
+        </div>
+      </div>
+      
+      <div class="model-option" data-model="pro">
+        <div class="model-option-icon pro">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </div>
+        <div class="model-option-info">
+          <h4>Pro</h4>
+          <p>Advanced maths and code</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ... বাকি বাটনগুলো আগের মতোই থাকবে ... -->
+</div>          <!-- Stop Button -->
           <button class="action-btn stop" id="stopBtn" title="Stop">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="4" y="4" width="16" height="16" rx="2"></rect>
@@ -1125,14 +1128,14 @@
   <script>
     // ==================== State Management ====================
     const state = {
-      messages: [],
-      chatHistory: [],
-      currentChatId: null,
-      currentModel: { id: 'fast', name: 'Fast', desc: 'Answers quickly' },
-      isGenerating: false,
-      editingMessageId: null
-    };
-
+  messages: [],
+  chatHistory: [],
+  currentChatId: null,
+  // ডিফল্ট মডেল 'thinking' করা হলো
+  currentModel: { id: 'thinking', name: 'Thinking', desc: 'Solves complex problems' }, 
+  isGenerating: false,
+  editingMessageId: null
+};
     // ==================== DOM Elements ====================
     const dom = {};
 
@@ -1465,14 +1468,14 @@
       return title || 'New Chat';
     }
 
-    function renderMessages() {
+        function renderMessages() {
       if (!dom.messagesContainer) return;
 
       dom.messagesContainer.innerHTML = state.messages.map(msg => {
         if (msg.role === 'user') {
           return `
             <div class="message user" data-id="${msg.id}">
-              <div class="message-avatar">U</div>
+              <!-- Avatar সরিয়ে দেওয়া হয়েছে -->
               <div class="message-body">
                 <div class="message-content" id="content-${msg.id}">${escapeHtml(msg.content)}</div>
                 
@@ -1505,11 +1508,23 @@
             </div>
           `;
         } else {
+          // AI Message - এখানেও Copy বাটন যোগ করা হলো এবং Avatar সরানো হলো
           return `
             <div class="message ai">
-              <div class="message-avatar">G</div>
+              <!-- Avatar সরিয়ে দেওয়া হয়েছে -->
               <div class="message-body">
                 <div class="message-content">${escapeHtml(msg.content)}</div>
+                
+                <div class="message-actions">
+                  <button class="msg-action-btn copy-btn" data-msg-id="${msg.id}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy
+                  </button>
+                </div>
+                
                 <div class="message-time">${formatTime(msg.timestamp)}</div>
               </div>
             </div>
@@ -1522,7 +1537,6 @@
 
       scrollToBottom();
     }
-
     function setupMessageActions() {
       // Copy buttons
       document.querySelectorAll('.copy-btn').forEach(btn => {
