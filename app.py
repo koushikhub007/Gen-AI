@@ -1,555 +1,127 @@
-<!DOCTYPE html>
-<html lang="bn">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gen AI Chat</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg-primary: #0a0a0f;
-      --bg-secondary: #12121a;
-      --bg-card: #1a1a24;
-      --bg-input: #16161f;
-      --border-color: #2a2a3a;
-      --text-primary: #f0f0f5;
-      --text-secondary: #a0a0b0;
-      --text-muted: #606070;
-      --accent: #6366f1;
-      --accent-glow: rgba(99, 102, 241, 0.3);
-      --success: #10b981;
-      --danger: #ef4444;
-    }
+import os
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from pymongo import MongoClient
+from werkzeug.security import generate_password_hash, check_password_hash
+from openai import OpenAI
+import uuid
 
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'your_default_secret_key_here')
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      height: 100%;
-      overflow: hidden;
-      position: fixed;
-      width: 100%;
-    }
+# --- Database Setup (MongoDB) ---
+MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/gen_ai_db')
+client = MongoClient(MONGO_URI)
+db = client.get_database()
+users_collection = db.users
 
-    html, body { height: 100%; }
+# --- Flask-Login Setup ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login_page'
 
-    h1, h2, h3, .font-display { font-family: 'Space Grotesk', sans-serif; }
+class User(UserMixin):
+    def __init__(self, user_doc):
+        self.id = str(user_doc['_id'])
+        self.username = user_doc['username']
 
-    .bg-gradient-mesh {
-      position: fixed; inset: 0;
-      background: 
-        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
-      pointer-events: none; z-index: 0;
-    }
+    @staticmethod
+    def get(user_id):
+        try:
+            user_doc = users_collection.find_one({'_id': uuid.UUID(user_id)})
+            if user_doc:
+                return User(user_doc)
+        except:
+            pass
+        return None
 
-    .noise-overlay {
-      position: fixed; inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-      opacity: 0.03; pointer-events: none; z-index: 1;
-    }
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
 
-    /* Sidebar Overlay */
-    .sidebar-overlay {
-      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
-      opacity: 0; visibility: hidden; transition: all 0.3s ease; z-index: 40;
-    }
-    .sidebar-overlay.open { opacity: 1; visibility: visible; }
+# --- OpenAI Setup ---
+# Ensure you set the OPENAI_API_KEY environment variable in Render
+openai_client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 
-    /* Slide Sidebar */
-    .slide-sidebar {
-      position: fixed; top: 0; left: 0; width: 320px; height: 100%;
-      background: var(--bg-secondary); border-right: 1px solid var(--border-color);
-      transform: translateX(-100%); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 50; display: flex; flex-direction: column;
-    }
-    .slide-sidebar.open { transform: translateX(0); }
+# --- Routes ---
 
-    .slide-sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
+@app.route('/')
+@login_required
+def index():
+    return render_template('chat.html', username=current_user.username)
+
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
     
-    .slide-sidebar-close {
-      width: 36px; height: 36px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 10px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; color: var(--text-secondary); transition: all 0.2s ease;
-    }
-    .slide-sidebar-close:hover { background: var(--danger); border-color: var(--danger); color: white; }
-
-    .slide-sidebar-search { padding: 16px 20px; }
-    .search-input {
-      width: 100%; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 12px; color: var(--text-primary); font-size: 14px; outline: none; transition: border-color 0.2s ease;
-    }
-    .search-input:focus { border-color: var(--accent); }
-    .search-input::placeholder { color: var(--text-muted); }
-
-    .slide-sidebar-content { flex: 1; overflow-y: auto; padding: 8px 12px; }
-    .sidebar-section { margin-bottom: 24px; }
-    .sidebar-section-title {
-      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-      color: var(--text-muted); padding: 0 8px; margin-bottom: 8px;
-    }
-
-    .sidebar-menu-item {
-      display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 10px;
-      cursor: pointer; transition: background 0.2s ease; color: var(--text-primary); font-size: 14px;
-    }
-    .sidebar-menu-item:hover { background: var(--bg-card); }
-    .sidebar-menu-item.active { background: var(--bg-card); border: 1px solid var(--accent); }
-    .sidebar-menu-icon {
-      width: 36px; height: 36px; background: var(--bg-input); border-radius: 10px;
-      display: flex; align-items: center; justify-content: center; color: var(--text-secondary);
-    }
-    .sidebar-menu-item.active .sidebar-menu-icon { background: var(--accent); color: white; }
-    .sidebar-menu-arrow { margin-left: auto; color: var(--text-muted); }
-
-    .slide-sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); }
-    .upgrade-card {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
-      border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 14px; padding: 16px;
-    }
-    .upgrade-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    .upgrade-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
-    .upgrade-btn {
-      width: 100%; padding: 10px; background: var(--accent); border: none; border-radius: 10px;
-      color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
-    }
-    .upgrade-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 16px var(--accent-glow); }
-
-    /* Main Container - Fixed Layout for Mobile */
-    .main-container { display: flex; flex-direction: column; height: 100%; position: relative; z-index: 5; }
-
-    /* Header */
-    .main-header {
-      padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex;
-      align-items: center; justify-content: space-between; background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(12px);
-      flex-shrink: 0;
-    }
-    .header-left { display: flex; align-items: center; gap: 16px; }
-    .hamburger-btn {
-      width: 40px; height: 40px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 10px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s ease;
-    }
-    .hamburger-btn:hover { border-color: var(--accent); background: var(--bg-secondary); }
-    .header-title-group { display: flex; flex-direction: column; }
-    .header-title { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -0.5px; }
-    .header-subtitle { font-size: 11px; color: var(--text-muted); }
-    .chat-title-display {
-      display: none; padding: 8px 14px; background: var(--bg-card); border-radius: 10px;
-      font-size: 13px; font-weight: 500; max-width: 250px; overflow: hidden;
-      text-overflow: ellipsis; white-space: nowrap;
-    }
-    .chat-title-display.visible { display: block; }
-
-    /* Chat Area - Fills remaining space */
-    .chat-container { flex: 1; overflow-y: auto; padding: 24px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-    .chat-container::-webkit-scrollbar { width: 6px; background: transparent; }
-    .chat-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-
-    /* Home Screen */
-    .home-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; min-height: 100%; }
-    .home-screen.hidden { display: none !important; }
-    .greeting { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600; margin-bottom: 8px; text-align: center; }
-    .greeting-sub { font-size: 15px; color: var(--text-secondary); margin-bottom: 36px; text-align: center; }
-    .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; width: 100%; max-width: 800px; }
-    .quick-action-card {
-      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 18px;
-      cursor: pointer; transition: all 0.3s ease; display: flex; flex-direction: column;
-      align-items: center; text-align: center; gap: 10px;
-    }
-    .quick-action-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12); }
-    .quick-action-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--bg-input), var(--bg-secondary)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-    .quick-action-title { font-size: 13px; font-weight: 600; }
-    .quick-action-desc { font-size: 11px; color: var(--text-muted); }
-
-    /* Messages */
-    .messages-container { display: none; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto; width: 100%; }
-    .messages-container.active { display: flex !important; }
-    .message { display: flex; gap: 12px; animation: messageIn 0.4s ease; width: 100%; }
-    @keyframes messageIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-    .message.user { justify-content: flex-end; }
-    .message.ai { justify-content: flex-start; }
+    user_doc = users_collection.find_one({'username': username})
     
-    .message-body { display: flex; flex-direction: column; gap: 6px; max-width: 80%; }
-    .message.user .message-body { align-items: flex-end; }
-    .message.ai .message-body { align-items: flex-start; }
-
-    .message-content { padding: 14px 18px; border-radius: 16px; font-size: 14px; line-height: 1.6; word-wrap: break-word; }
-    .message.user .message-content { background: linear-gradient(135deg, #1e3a5f, #1e40af); border-bottom-right-radius: 4px; }
-    .message.ai .message-content { background: var(--bg-card); border: 1px solid var(--border-color); border-bottom-left-radius: 4px; }
-
-    .message-actions { display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s ease; margin-top: 4px; }
-    .message:hover .message-actions { opacity: 1; }
+    if user_doc and check_password_hash(user_doc['password'], password):
+        user_obj = User(user_doc)
+        login_user(user_obj)
+        return jsonify({'success': True})
     
-    .msg-action-btn {
-      padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 8px; font-size: 11px; color: var(--text-secondary); cursor: pointer;
-      display: flex; align-items: center; gap: 4px; transition: all 0.2s ease;
-    }
-    .msg-action-btn:hover { background: var(--bg-secondary); border-color: var(--accent); color: var(--text-primary); }
-    .msg-action-btn.copied { background: var(--success); border-color: var(--success); color: white; }
+    return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
-    .message-time { font-size: 10px; color: var(--text-muted); }
-
-    /* Edit Mode */
-    .edit-container { display: none; width: 100%; }
-    .edit-container.active { display: block; }
-    .edit-textarea {
-      width: 100%; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--accent);
-      border-radius: 14px; color: var(--text-primary); font-size: 14px; font-family: 'Inter', sans-serif;
-      line-height: 1.6; outline: none; resize: none; min-height: 80px;
-    }
-    .edit-actions { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
-    .edit-cancel-btn {
-      padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 8px; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.2s ease;
-    }
-    .edit-cancel-btn:hover { background: var(--bg-secondary); }
-    .edit-save-btn {
-      padding: 8px 16px; background: var(--accent); border: none; border-radius: 8px;
-      color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
-    }
-    .edit-save-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--accent-glow); }
-
-    /* Input Area - Fixed at Bottom for Mobile Keyboard Issue */
-    .input-area {
-      position: relative; 
-      padding: 12px 16px;
-      padding-bottom: calc(12px + env(safe-area-inset-bottom)); /* Safe area for iPhones */
-      background: var(--bg-primary); 
-      border-top: 1px solid var(--border-color);
-      flex-shrink: 0;
-    }
+@app.route('/api/signup', methods=['POST'])
+def api_signup():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
     
-    .input-wrapper {
-      max-width: 800px; margin: 0 auto; background: var(--bg-input); border: 1px solid var(--border-color);
-      border-radius: 18px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;
-    }
-    .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
-    .input-field {
-      flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary);
-      font-size: 15px; font-family: 'Inter', sans-serif; resize: none; min-height: 24px; max-height: 100px; line-height: 1.5;
-    }
-    .input-field::placeholder { color: var(--text-muted); }
-    
-    /* Input Actions & Buttons */
-    .input-actions { display: flex; align-items: center; gap: 4px; height: 38px; }
-    .action-btn {
-      width: 38px; height: 38px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 10px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s ease; color: var(--text-secondary); flex-shrink: 0;
-    }
-    .action-btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); color: var(--text-primary); }
-    .action-btn.send { background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; color: white; }
-    .action-btn.send:hover { transform: scale(1.05); box-shadow: 0 4px 16px var(--accent-glow); }
-    .action-btn.stop { background: #dc2626; border: none; color: white; border-radius: 8px; display: none; }
-    .action-btn.stop.visible { display: flex; }
-
-    /* Model Selector */
-    .model-selector { position: relative; height: 100%; display: flex; align-items: center; }
-    .model-btn {
-      height: 100%; padding: 0 10px; background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 8px; display: flex; align-items: center; gap: 4px; cursor: pointer;
-      font-size: 12px; font-weight: 500; color: var(--text-primary); transition: all 0.2s ease;
-    }
-    .model-btn:hover { border-color: var(--accent); }
-    .model-btn svg { width: 12px; height: 12px; color: var(--text-muted); transition: transform 0.2s ease; }
-    .model-btn.open svg { transform: rotate(180deg); }
-
-    .model-dropdown {
-      position: absolute; bottom: calc(100% + 8px); right: 0; width: 240px;
-      background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 6px;
-      opacity: 0; visibility: hidden; transform: translateY(10px); transition: all 0.2s ease; z-index: 100;
-    }
-    .model-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
-    .model-option {
-      padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: flex-start;
-      gap: 8px; transition: background 0.2s ease; border: 1px solid transparent;
-    }
-    .model-option:hover { background: var(--bg-card); }
-    .model-option.selected { background: var(--bg-card); border: 1px solid var(--accent); }
-    
-    .model-option-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
-    .model-option-icon.thinking { background: linear-gradient(135deg, #f59e0b, #d97706); }
-    .model-option-icon.pro { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
-    
-    .model-option-info h4 { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
-    .model-option-info p { font-size: 10px; color: var(--text-muted); }
-
-    /* Typing Indicator */
-    .typing-indicator { display: none; align-items: center; gap: 12px; animation: messageIn 0.4s ease; max-width: 800px; margin: 0 auto; width: 100%; }
-    .typing-indicator.visible { display: flex; margin-bottom: 10px; }
-    .typing-dots { display: flex; gap: 4px; padding: 12px 16px; background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); }
-    .typing-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; animation: typingBounce 1.4s ease-in-out infinite; }
-    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .slide-sidebar { width: 100%; }
-      .message-content { max-width: 85%; }
-      .quick-actions { grid-template-columns: repeat(2, 1fr); }
-    }
-  </style>
-</head>
-<body>
-  <div class="bg-gradient-mesh"></div>
-  <div class="noise-overlay"></div>
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-  <aside class="slide-sidebar" id="slideSidebar">
-    <div class="slide-sidebar-header">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;">G</div>
-        <div>
-          <div style="font-weight: 600; font-size: 16px;">Gen AI</div>
-          <div style="font-size: 10px; color: var(--text-muted);">AI Assistant</div>
-        </div>
-      </div>
-      <button class="slide-sidebar-close" id="closeSidebarBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
-    </div>
-    <div class="slide-sidebar-search"><input type="text" class="search-input" placeholder="Search..." id="searchInput"></div>
-    <div class="slide-sidebar-content" id="sidebarContent">
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Main Menu</div>
-        <div class="sidebar-menu-item active" id="newChatMenuBtn">
-          <div class="sidebar-menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></div>
-          <span>New Chat</span>
-        </div>
-        <div class="sidebar-menu-item">
-          <div class="sidebar-menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
-          <span>Recent</span>
-        </div>
-      </div>
-      <div class="sidebar-section" id="historySection">
-        <div class="sidebar-section-title">History</div>
-        <div id="sidebarHistoryList"><p style="padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center;">No history</p></div>
-      </div>
-    </div>
-    <div class="slide-sidebar-footer">
-      <div class="upgrade-card">
-        <div class="upgrade-title">Upgrade to Pro</div>
-        <div class="upgrade-desc">Get faster responses</div>
-        <button class="upgrade-btn">Upgrade</button>
-      </div>
-    </div>
-  </aside>
-
-  <main class="main-container">
-    <header class="main-header">
-      <div class="header-left">
-        <button class="hamburger-btn" id="hamburgerBtn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-        <div class="header-title-group">
-          <h1 class="header-title">Gen AI</h1>
-          <p class="header-subtitle">AI Assistant</p>
-        </div>
-      </div>
-      <div class="chat-title-display" id="chatTitleDisplay"></div>
-    </header>
-
-    <div class="chat-container" id="chatContainer">
-      <div class="home-screen" id="homeScreen">
-        <h2 class="greeting">Hi, there</h2>
-        <p class="greeting-sub">Where should we start today?</p>
-        <div class="quick-actions" id="quickActions"></div>
-      </div>
-      <div class="messages-container" id="messagesContainer"></div>
-      <div class="typing-indicator" id="typingIndicator">
-        <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
-      </div>
-    </div>
-
-    <div class="input-area">
-      <div class="input-wrapper">
-        <button class="action-btn" id="attachBtn" title="Attach">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-        </button>
+    if not username or not password:
+        return jsonify({'success': False, 'message': 'Missing fields'}), 400
         
-        <!-- Placeholder ফাঁকা করা হলো -->
-        <textarea class="input-field" id="messageInput" placeholder="" rows="1"></textarea>
+    if users_collection.find_one({'username': username}):
+        return jsonify({'success': False, 'message': 'User already exists'}), 400
+    
+    hashed_password = generate_password_hash(password)
+    users_collection.insert_one({
+        '_id': uuid.uuid4(),
+        'username': username,
+        'password': hashed_password
+    })
+    
+    return jsonify({'success': True})
 
-        <div class="input-actions">
-          <div class="model-selector">
-            <button class="model-btn" id="modelBtn">
-              <span id="selectedModelName">Thinking</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="model-dropdown" id="modelDropdown">
-              <div class="model-option selected" data-model="thinking">
-                <div class="model-option-icon thinking"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
-                <div class="model-option-info"><h4>Thinking</h4><p>Complex problems</p></div>
-              </div>
-              <div class="model-option" data-model="pro">
-                <div class="model-option-icon pro"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
-                <div class="model-option-info"><h4>Pro</h4><p>Advanced</p></div>
-              </div>
-            </div>
-          </div>
-          <button class="action-btn stop" id="stopBtn" title="Stop"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg></button>
-          <button class="action-btn send" id="sendBtn" title="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
-        </div>
-      </div>
-    </div>
-  </main>
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login_page'))
 
-  <script>
-    const state = {
-      messages: [], chatHistory: [], currentChatId: null,
-      currentModel: { id: 'thinking', name: 'Thinking' },
-      isGenerating: false, editingMessageId: null
-    };
+@app.route('/chat', methods=['POST'])
+@login_required
+def chat():
+    data = request.json
+    user_message = data.get('message')
+    model_id = data.get('model', 'thinking') # 'thinking' or 'pro'
 
-    const dom = {};
+    if not user_message:
+        return jsonify({'reply': 'Empty message received.'})
 
-    document.addEventListener('DOMContentLoaded', function() {
-      dom.homeScreen = document.getElementById('homeScreen'); dom.messagesContainer = document.getElementById('messagesContainer');
-      dom.messageInput = document.getElementById('messageInput'); dom.sendBtn = document.getElementById('sendBtn');
-      dom.stopBtn = document.getElementById('stopBtn'); dom.typingIndicator = document.getElementById('typingIndicator');
-      dom.modelDropdown = document.getElementById('modelDropdown'); dom.modelBtn = document.getElementById('modelBtn');
-      dom.selectedModelName = document.getElementById('selectedModelName'); dom.chatTitleDisplay = document.getElementById('chatTitleDisplay');
-      dom.chatContainer = document.getElementById('chatContainer'); dom.slideSidebar = document.getElementById('slideSidebar');
-      dom.sidebarOverlay = document.getElementById('sidebarOverlay'); dom.sidebarHistoryList = document.getElementById('sidebarHistoryList');
-      dom.searchInput = document.getElementById('searchInput'); dom.hamburgerBtn = document.getElementById('hamburgerBtn');
-      dom.closeSidebarBtn = document.getElementById('closeSidebarBtn'); dom.newChatMenuBtn = document.getElementById('newChatMenuBtn');
-      dom.quickActions = document.getElementById('quickActions');
-      setupEventListeners(); renderQuickActions(); loadChatHistory();
-    });
-
-    function setupEventListeners() {
-      if (dom.messageInput) {
-        dom.messageInput.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 100) + 'px'; });
+    try:
+        # Select model based on input
+        # Note: Adjust model names as per your OpenAI subscription
+        model_name = "gpt-3.5-turbo" if model_id == 'pro' else "gpt-4o-mini" 
         
-        // এন্টার বাটনের লজিক সরিয়ে দেওয়া হলো। এখন এন্টার চাপলে নতুন লাইন হবে। 
-        // মেসেজ পাঠাতে হলে সেন্ড বাটন ব্যবহার করতে হবে।
-      }
-      if (dom.sendBtn) dom.sendBtn.addEventListener('click', sendMessage);
-      if (dom.stopBtn) dom.stopBtn.addEventListener('click', stopGeneration);
-      if (dom.hamburgerBtn) dom.hamburgerBtn.addEventListener('click', openSidebar);
-      if (dom.closeSidebarBtn) dom.closeSidebarBtn.addEventListener('click', closeSidebar);
-      if (dom.sidebarOverlay) dom.sidebarOverlay.addEventListener('click', closeSidebar);
-      if (dom.newChatMenuBtn) dom.newChatMenuBtn.addEventListener('click', function() { startNewChat(); closeSidebar(); });
-      if (dom.modelBtn) dom.modelBtn.addEventListener('click', function(e) { e.stopPropagation(); toggleModelDropdown(); });
-      if (dom.modelDropdown) {
-        const options = dom.modelDropdown.querySelectorAll('.model-option');
-        options.forEach(opt => { opt.addEventListener('click', function() { selectModel(this.dataset.model); }); });
-      }
-      document.addEventListener('click', function(e) { if (dom.modelDropdown && !e.target.closest('.model-selector')) { dom.modelDropdown.classList.remove('open'); if (dom.modelBtn) dom.modelBtn.classList.remove('open'); } });
-      if (dom.searchInput) dom.searchInput.addEventListener('input', filterHistory);
-    }
+        response = openai_client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": user_message}]
+        )
+        reply = response.choices[0].message.content
+        return jsonify({'reply': reply})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'reply': f"An error occurred: {str(e)}"})
 
-    function renderQuickActions() {
-      const actions = [
-        { title: 'Create Image', desc: 'Visuals', prompt: 'Create an image of a futuristic city', icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>' },
-        { title: 'Write Code', desc: 'Scripts', prompt: 'Write a Python script', icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>' },
-        { title: 'Learn', desc: 'Explain', prompt: 'Explain quantum computing', icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>' }
-      ];
-      if (dom.quickActions) {
-        dom.quickActions.innerHTML = actions.map(action => `<div class="quick-action-card" data-prompt="${action.prompt}"><div class="quick-action-icon">${action.icon}</div><div class="quick-action-title">${action.title}</div><div class="quick-action-desc">${action.desc}</div></div>`).join('');
-        const cards = dom.quickActions.querySelectorAll('.quick-action-card');
-        cards.forEach(card => { card.addEventListener('click', function() { setPrompt(this.dataset.prompt); }); });
-      }
-    }
-
-    function openSidebar() { if (dom.slideSidebar) dom.slideSidebar.classList.add('open'); if (dom.sidebarOverlay) dom.sidebarOverlay.classList.add('open'); document.body.style.overflow = 'hidden'; }
-    function closeSidebar() { if (dom.slideSidebar) dom.slideSidebar.classList.remove('open'); if (dom.sidebarOverlay) dom.sidebarOverlay.classList.remove('open'); document.body.style.overflow = ''; }
-    function filterHistory() { const query = dom.searchInput ? dom.searchInput.value.toLowerCase() : ''; const items = document.querySelectorAll('.history-item-card'); items.forEach(item => { const title = item.querySelector('.history-item-title'); if (title) { item.style.display = title.textContent.toLowerCase().includes(query) ? 'flex' : 'none'; } }); }
-
-    function toggleModelDropdown() { if (dom.modelDropdown) dom.modelDropdown.classList.toggle('open'); if (dom.modelBtn) dom.modelBtn.classList.toggle('open'); }
-    function selectModel(modelId) {
-      const models = { thinking: { id: 'thinking', name: 'Thinking' }, pro: { id: 'pro', name: 'Pro' } };
-      state.currentModel = models[modelId] || models.thinking;
-      if (dom.selectedModelName) dom.selectedModelName.textContent = state.currentModel.name;
-      if (dom.modelDropdown) { const options = dom.modelDropdown.querySelectorAll('.model-option'); options.forEach(opt => { opt.classList.toggle('selected', opt.dataset.model === modelId); }); dom.modelDropdown.classList.remove('open'); }
-      if (dom.modelBtn) dom.modelBtn.classList.remove('open');
-    }
-
-    function loadChatHistory() { try { const saved = localStorage.getItem('gen_ai_history'); if (saved) { state.chatHistory = JSON.parse(saved); renderSidebarHistory(); } } catch (e) {} }
-    function saveChatHistory() { try { localStorage.setItem('gen_ai_history', JSON.stringify(state.chatHistory)); } catch (e) {} }
-    function renderSidebarHistory() {
-      if (!dom.sidebarHistoryList) return;
-      if (state.chatHistory.length === 0) { dom.sidebarHistoryList.innerHTML = '<p style="padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center;">No history</p>'; return; }
-      dom.sidebarHistoryList.innerHTML = state.chatHistory.slice(0, 10).map(chat => `<div class="sidebar-menu-item history-item-card" data-chat-id="${chat.id}" style="padding: 10px 12px; margin-bottom: 4px;"><div class="sidebar-menu-icon" style="width: 28px; height: 28px; font-size: 11px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div><div style="flex: 1; min-width: 0;"><div class="history-item-title" style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(chat.title)}</div><div style="font-size: 10px; color: var(--text-muted);">${formatTime(chat.timestamp)}</div></div></div>`).join('');
-      const items = dom.sidebarHistoryList.querySelectorAll('.history-item-card'); items.forEach(item => { item.addEventListener('click', function() { loadChat(this.dataset.chatId); closeSidebar(); }); });
-    }
-    function loadChat(chatId) { const chat = state.chatHistory.find(c => c.id === chatId); if (!chat) return; state.currentChatId = chatId; state.messages = chat.messages || []; renderMessages(); updateUI(); if (dom.chatTitleDisplay) { dom.chatTitleDisplay.textContent = chat.title; dom.chatTitleDisplay.classList.add('visible'); } }
-
-    function setPrompt(text) { if (dom.messageInput) { dom.messageInput.value = text; dom.messageInput.focus(); } }
-    function sendMessage() {
-      if (!dom.messageInput) return; const text = dom.messageInput.value.trim(); if (!text || state.isGenerating) return;
-      dom.messageInput.value = ''; dom.messageInput.style.height = 'auto';
-      if (state.messages.length === 0) { const title = extractTitle(text); state.currentChatId = generateId(); state.chatHistory.unshift({ id: state.currentChatId, title: title, timestamp: Date.now(), messages: [] }); if (dom.chatTitleDisplay) { dom.chatTitleDisplay.textContent = title; dom.chatTitleDisplay.classList.add('visible'); } renderSidebarHistory(); }
-      const userMessage = { id: generateId(), role: 'user', content: text, timestamp: Date.now() }; state.messages.push(userMessage);
-      renderMessages(); updateUI(); generateResponse(text);
-    }
-    function extractTitle(text) { const cleanText = text.replace(/[^\w\s\u0980-\u09FF\u0000-\u007F]/g, '').trim(); const words = cleanText.split(/\s+/).slice(0, 5); let title = words.join(' '); if (title.length > 30) title = title.substring(0, 30) + '...'; return title || 'New Chat'; }
-
-    function renderMessages() {
-      if (!dom.messagesContainer) return;
-      dom.messagesContainer.innerHTML = state.messages.map(msg => {
-        if (msg.role === 'user') {
-          return `<div class="message user" data-id="${msg.id}"><div class="message-body"><div class="message-content" id="content-${msg.id}">${escapeHtml(msg.content)}</div><div class="edit-container" id="edit-${msg.id}"><textarea class="edit-textarea" id="editText-${msg.id}">${escapeHtml(msg.content)}</textarea><div class="edit-actions"><button class="edit-cancel-btn" data-msg-id="${msg.id}">Cancel</button><button class="edit-save-btn" data-msg-id="${msg.id}">Send</button></div></div><div class="message-actions" id="actions-${msg.id}"><button class="msg-action-btn copy-btn" data-msg-id="${msg.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy</button><button class="msg-action-btn edit-btn" data-msg-id="${msg.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> Edit</button></div><div class="message-time">${formatTime(msg.timestamp)}</div></div></div>`;
-        } else {
-          return `<div class="message ai"><div class="message-body"><div class="message-content">${escapeHtml(msg.content)}</div><div class="message-actions"><button class="msg-action-btn copy-btn" data-msg-id="${msg.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy</button></div><div class="message-time">${formatTime(msg.timestamp)}</div></div></div>`;
-        }
-      }).join('');
-      setupMessageActions(); scrollToBottom();
-    }
-
-    function setupMessageActions() {
-      document.querySelectorAll('.copy-btn').forEach(btn => { btn.addEventListener('click', function() { copyMessage(this.dataset.msgId); }); });
-      document.querySelectorAll('.edit-btn').forEach(btn => { btn.addEventListener('click', function() { editMessage(this.dataset.msgId); }); });
-      document.querySelectorAll('.edit-cancel-btn').forEach(btn => { btn.addEventListener('click', function() { cancelEdit(this.dataset.msgId); }); });
-      document.querySelectorAll('.edit-save-btn').forEach(btn => { btn.addEventListener('click', function() { saveEdit(this.dataset.msgId); }); });
-    }
-    
-    function updateUI() {
-      const hasMessages = state.messages.length > 0;
-      if (dom.homeScreen) { if (hasMessages) dom.homeScreen.classList.add('hidden'); else dom.homeScreen.classList.remove('hidden'); }
-      if (dom.messagesContainer) { if (hasMessages) dom.messagesContainer.classList.add('active'); else dom.messagesContainer.classList.remove('active'); }
-      if (state.currentChatId && hasMessages) { const chatIndex = state.chatHistory.findIndex(c => c.id === state.currentChatId); if (chatIndex >= 0) { state.chatHistory[chatIndex].messages = state.messages; state.chatHistory[chatIndex].timestamp = Date.now(); saveChatHistory(); renderSidebarHistory(); } }
-    }
-
-    function copyMessage(msgId) {
-      const msg = state.messages.find(m => m.id === msgId); if (!msg) return;
-      navigator.clipboard.writeText(msg.content).then(() => {
-        const btn = document.querySelector(`.copy-btn[data-msg-id="${msgId}"]`);
-        if (btn) { btn.classList.add('copied'); btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied`; setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy`; }, 2000); }
-      });
-    }
-    function editMessage(msgId) { const contentEl = document.getElementById('content-' + msgId); const editEl = document.getElementById('edit-' + msgId); const actionsEl = document.getElementById('actions-' + msgId); const textarea = document.getElementById('editText-' + msgId); if (contentEl) contentEl.style.display = 'none'; if (editEl) editEl.classList.add('active'); if (actionsEl) actionsEl.style.display = 'none'; if (textarea) { textarea.focus(); textarea.style.height = 'auto'; textarea.style.height = textarea.scrollHeight + 'px'; } state.editingMessageId = msgId; }
-    function cancelEdit(msgId) { const contentEl = document.getElementById('content-' + msgId); const editEl = document.getElementById('edit-' + msgId); const actionsEl = document.getElementById('actions-' + msgId); if (contentEl) contentEl.style.display = 'block'; if (editEl) editEl.classList.remove('active'); if (actionsEl) actionsEl.style.display = 'flex'; state.editingMessageId = null; }
-    function saveEdit(msgId) { const textarea = document.getElementById('editText-' + msgId); if (!textarea) return; const newContent = textarea.value.trim(); if (!newContent) return; const msgIndex = state.messages.findIndex(m => m.id === msgId); if (msgIndex === -1) return; state.messages = state.messages.slice(0, msgIndex + 1); state.messages[msgIndex].content = newContent; state.messages[msgIndex].timestamp = Date.now(); renderMessages(); updateUI(); generateResponse(newContent); }
-
-    function generateResponse(userText) {
-      state.isGenerating = true;
-      if (dom.sendBtn) dom.sendBtn.style.display = 'none'; if (dom.stopBtn) dom.stopBtn.classList.add('visible'); if (dom.typingIndicator) dom.typingIndicator.classList.add('visible'); scrollToBottom();
-      fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: userText, model: state.currentModel.id }) })
-      .then(response => response.json())
-      .then(data => {
-        state.isGenerating = false; if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible'); if (dom.sendBtn) dom.sendBtn.style.display = 'flex'; if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
-        if (data.reply) { const aiMessage = { id: generateId(), role: 'ai', content: data.reply, timestamp: Date.now() }; state.messages.push(aiMessage); renderMessages(); updateUI(); }
-        else { alert("Error: " + (data.error || "Unknown")); }
-      })
-      .catch(error => { console.error('Error:', error); state.isGenerating = false; if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible'); if (dom.sendBtn) dom.sendBtn.style.display = 'flex'; if (dom.stopBtn) dom.stopBtn.classList.remove('visible'); alert("Connection failed."); });
-    }
-    function stopGeneration() { state.isGenerating = false; if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible'); if (dom.sendBtn) dom.sendBtn.style.display = 'flex'; if (dom.stopBtn) dom.stopBtn.classList.remove('visible'); }
-    
-    function startNewChat() { state.messages = []; state.currentChatId = null; state.isGenerating = false; if (dom.messagesContainer) dom.messagesContainer.innerHTML = ''; if (dom.chatTitleDisplay) { dom.chatTitleDisplay.textContent = ''; dom.chatTitleDisplay.classList.remove('visible'); } if (dom.homeScreen) dom.homeScreen.classList.remove('hidden'); if (dom.messagesContainer) dom.messagesContainer.classList.remove('active'); if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible'); if (dom.sendBtn) dom.sendBtn.style.display = 'flex'; if (dom.stopBtn) dom.stopBtn.classList.remove('visible'); if (dom.messageInput) dom.messageInput.focus(); }
-
-    function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
-    function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML.replace(/\n/g, '<br>'); }
-    function formatTime(timestamp) { const date = new Date(timestamp); const now = new Date(); const diff = now - date; if (diff < 60000) return 'Just now'; if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago'; return date.toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }); }
-    function scrollToBottom() { if (dom.chatContainer) { dom.chatContainer.scrollTop = dom.chatContainer.scrollHeight; } }
-  </script>
-</body>
-</html>
+if __name__ == '__main__':
+    # Render sets the PORT environment variable
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
