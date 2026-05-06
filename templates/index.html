@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gemini Chat</title>
+  <title>Gen AI Chat</title> <!-- নাম পরিবর্তন -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -916,9 +916,11 @@
   <aside class="slide-sidebar" id="slideSidebar">
     <div class="slide-sidebar-header">
       <div style="display: flex; align-items: center; gap: 10px;">
+        <!-- লোগো পরিবর্তন -->
         <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;">G</div>
         <div>
-          <div style="font-weight: 600; font-size: 16px;">Gemini</div>
+          <!-- নাম পরিবর্তন -->
+          <div style="font-weight: 600; font-size: 16px;">Gen AI</div>
           <div style="font-size: 10px; color: var(--text-muted);">AI Assistant</div>
         </div>
       </div>
@@ -1003,7 +1005,8 @@
           </svg>
         </button>
         <div class="header-title-group">
-          <h1 class="header-title">Gemini</h1>
+          <!-- নাম পরিবর্তন -->
+          <h1 class="header-title">Gen AI</h1>
           <p class="header-subtitle">AI Assistant</p>
         </div>
       </div>
@@ -1047,7 +1050,8 @@
         <textarea
           class="input-field"
           id="messageInput"
-          placeholder="Ask Gemini..."
+          <!-- প্লেসহোল্ডার পরিবর্তন -->
+          placeholder="Ask Gen AI..."
           rows="1"
         ></textarea>
 
@@ -1664,7 +1668,7 @@
       generateResponse(newContent);
     }
 
-            // ==================== AI Response (Backend Connection) ====================
+    // ==================== AI Response (Backend Connection) ====================
     function generateResponse(userText) {
       state.isGenerating = true;
       
@@ -1682,7 +1686,7 @@
         },
         body: JSON.stringify({
           message: userText,
-          model: state.currentModel.id // UI থেকে fast/thinking/pro আসছে
+          model: state.currentModel.id
         })
       })
       .then(response => response.json())
@@ -1718,13 +1722,10 @@
 
     function stopGeneration() {
       state.isGenerating = false;
-      // Note: Fetch API request cancellation is complex, 
-      // here we just reset the UI state.
       if (dom.typingIndicator) dom.typingIndicator.classList.remove('visible');
       if (dom.sendBtn) dom.sendBtn.style.display = 'flex';
       if (dom.stopBtn) dom.stopBtn.classList.remove('visible');
     }
-
     
     // ==================== New Chat ====================
     function startNewChat() {
