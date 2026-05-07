@@ -1,4 +1,7 @@
 import os
+import json
+import base64
+import hashlib
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -7,10 +10,33 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
 import uuid
 from urllib.parse import quote_plus
+# Encryption এর জন্য import
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
-# SECRET_KEY অবশ্যই Environment Variable এ দিতে হবে, না হলে রিস্টার্ট দিলে সেশন চলে যাবে
+# SECRET_KEY অবশ্যই Environment Variable এ দিতে হবে
 app.secret_key = os.environ.get('SECRET_KEY', 'my_super_secret_key_123')
+
+# --- Encryption Setup ---
+# SECRET_KEY ব্যবহার করে একটি Encryption Key তৈরি করা হচ্ছে
+key_bytes = hashlib.sha256(app.secret_key.encode()).digest()
+cipher_key = base64.urlsafe_b64encode(key_bytes)
+cipher_suite = Fernet(cipher_key)
+
+def encrypt_data(data):
+    """ডাটা এনক্রিপ্ট করার ফাংশন"""
+    if not data: return ""
+    json_str = json.dumps(data)
+    return cipher_suite.encrypt(json_str.encode()).decode()
+
+def decrypt_data(encrypted_data):
+    """ডাটা ডিক্রিপ্ট করার ফাংশন"""
+    if not encrypted_data: return []
+    try:
+        json_str = cipher_suite.decrypt(encrypted_data.encode()).decode()
+        return json.loads(json_str)
+    except:
+        return [] # পুরনো ডাটা থাকলে বা এরর হলে ফাঁকা রিটার্ন করবে
 
 # --- MongoDB Setup ---
 MONGO_USER = os.environ.get("MONGO_USER")
@@ -21,7 +47,6 @@ DB_NAME = "gen_ai_db"
 client_db = None
 db = None
 users_collection = None
-history_collection = None
 
 try:
     if MONGO_USER and MONGO_PASS and MONGO_CLUSTER:
@@ -32,8 +57,6 @@ try:
         client_db = MongoClient(MONGO_URI)
         db = client_db[DB_NAME]
         users_collection = db["users"]
-        # History সেভ করার জন্য আলাদা collection
-        history_collection = db["user_histories"] 
         print("MongoDB Connected Successfully!")
 except Exception as e:
     print(f"MongoDB Connection Error: {e}")
@@ -86,8 +109,7 @@ def api_login():
     user_doc = users_collection.find_one({'username': data.get('username')})
     if user_doc and check_password_hash(user_doc['password'], data.get('password')):
         u = User(user_doc)
-        # 'remember=True' দিলে ব্রাউজার বন্ধ করলেও লগইন থাকবে
-        login_user(u, remember=True) 
+        login_user(u, remember=True)
         return jsonify({'success': True})
     return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
@@ -109,7 +131,8 @@ def api_signup():
     users_collection.insert_one({
         '_id': user_id,
         'username': username,
-        'password': generate_password_hash(password)
+        'password': generate_password_hash(password),
+        'encrypted_history': "" # নতুন ফিল্ড
     })
     return jsonify({'success': True})
 
@@ -119,7 +142,7 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-# --- Chat & History Routes ---
+# --- Chat & Encrypted History Routes ---
 
 @app.route('/chat', methods=['POST'])
 @login_required
@@ -136,33 +159,36 @@ def chat():
             messages=[{"role": "user", "content": user_text}]
         )
         bot_reply = response.choices[0].message.content
-
-        # ১. Message ডাটাবেসে সেভ করা হচ্ছে (ঐচ্ছিক, তবে ভবিষ্যতের জন্য ভালো)
-        # ২. এখানে আমরা History Sync API এর জন্য শুধু Chat করব, History Frontend থেকে আলাদাভাবে সেভ হবে
-        
         return jsonify({'reply': bot_reply})
     except Exception as e:
         return jsonify({'reply': f"Error: {str(e)}"})
 
-# History সেভ করার API
+# History সেভ করার API (Encrypted)
 @app.route('/api/save_history', methods=['POST'])
 @login_required
 def save_history():
     data = request.json
-    # User ভিত্তিক History আপডেট করা
+    history_list = data.get('history', [])
+    
+    # ডাটা এনক্রিপ্ট করে সেভ করা হচ্ছে
+    encrypted_string = encrypt_data(history_list)
+    
     users_collection.update_one(
         {'username': current_user.username},
-        {'$set': {'chat_history': data.get('history', [])}}
+        {'$set': {'encrypted_history': encrypted_string}}
     )
     return jsonify({'success': True})
 
-# History লোড করার API
+# History লোড করার API (Decrypted)
 @app.route('/api/get_history')
 @login_required
 def get_history():
     user_doc = users_collection.find_one({'username': current_user.username})
-    if user_doc and 'chat_history' in user_doc:
-        return jsonify({'history': user_doc['chat_history']})
+    if user_doc and 'encrypted_history' in user_doc:
+        # ডাটা ডিক্রিপ্ট করে ফেরত পাঠানো হচ্ছে
+        encrypted_string = user_doc['encrypted_history']
+        decrypted_list = decrypt_data(encrypted_string)
+        return jsonify({'history': decrypted_list})
     return jsonify({'history': []})
 
 if __name__ == '__main__':
