@@ -77,8 +77,27 @@ if groq_key:
     )
     print("Groq AI Ready")
 
-# --- Login Manager & Routes (Signup/Login/Logout same as before) ---
-# ... (সংক্ষেপের জন্য আগের কোডের লজিক একই থাকবে, নিচে শুধু চ্যাট রুটটি দেওয়া হলো)
+# --- Login Manager ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login_page'
+
+class User(UserMixin):
+    def __init__(self, user_doc):
+        self.id = str(user_doc['_id'])
+        self.username = user_doc['username']
+
+    @staticmethod
+    def get(user_id):
+        if users_collection is None: return None
+        user_doc = users_collection.find_one({'_id': user_id})
+        return User(user_doc) if user_doc else None
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
+
+# --- Routes ---
 
 @app.route('/')
 @login_required
@@ -118,29 +137,30 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-# --- Chat Route (Corrected Model IDs) ---
+# --- Chat Route ---
 
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
     data = request.json
     user_text = data.get('message')
-    model_key = data.get('model', 'glm-4-flash') # ডিফল্ট glm-4-flash
+    model_key = data.get('model', 'glm-4-flash')
 
-    # মডেল সিলেকশন লজিক
     client = None
     model_id = None
 
+    # GLM Models Setup
     if model_key == 'glm-4-flash':
         if not zhipu_client: return jsonify({'reply': "Zhipu API Key missing"})
         client = zhipu_client
-        model_id = "glm-4-flash" # ডকুমেন্টেশন অনুযায়ী সঠিক নাম
+        model_id = "glm-4-flash" # সঠিক Model ID
         
     elif model_key == 'glm-4-air':
         if not zhipu_client: return jsonify({'reply': "Zhipu API Key missing"})
         client = zhipu_client
-        model_id = "glm-4-air" # ডকুমেন্টেশন অনুযায়ী সঠিক নাম
+        model_id = "glm-4-air"   # সঠিক Model ID
         
+    # Llama Models Setup
     elif model_key == 'llama-70b':
         if not groq_client: return jsonify({'reply': "Groq API Key missing"})
         client = groq_client
@@ -154,6 +174,10 @@ def chat():
     else:
         return jsonify({'reply': "Invalid Model Selection"})
 
+    # Safety check
+    if client is None:
+         return jsonify({'reply': "API Client not initialized"})
+
     try:
         response = client.chat.completions.create(
             model=model_id,
@@ -164,7 +188,8 @@ def chat():
     except Exception as e:
         return jsonify({'reply': f"Error: {str(e)}"})
 
-# History Routes...
+# --- History Routes ---
+
 @app.route('/api/save_history', methods=['POST'])
 @login_required
 def save_history():
