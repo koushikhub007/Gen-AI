@@ -412,7 +412,7 @@
 
     const dom = {};
 
-    document.addEventListener('DOMContentLoaded', function() {
+       document.addEventListener('DOMContentLoaded', function() {
       dom.homeScreen = document.getElementById('homeScreen'); dom.messagesContainer = document.getElementById('messagesContainer');
       dom.messageInput = document.getElementById('messageInput'); dom.sendBtn = document.getElementById('sendBtn');
       dom.stopBtn = document.getElementById('stopBtn'); dom.typingIndicator = document.getElementById('typingIndicator');
@@ -424,6 +424,9 @@
       dom.closeSidebarBtn = document.getElementById('closeSidebarBtn'); dom.newChatMenuBtn = document.getElementById('newChatMenuBtn');
       dom.quickActions = document.getElementById('quickActions');
       setupEventListeners(); renderQuickActions(); loadChatHistory();
+      
+      // এই লাইনটি যোগ করুন (Auto-Sync চালু করার জন্য)
+      startAutoSync(); 
     });
 
     function setupEventListeners() {
@@ -474,12 +477,11 @@
       if (dom.modelBtn) dom.modelBtn.classList.remove('open');
     }
 
-        function loadChatHistory() { 
-      // পুরানো Local Storage এর ডাটা মুছে ফেলা হলো যাতে অন্য ইউজারের ডাটা না দেখায়
+            function loadChatHistory() { 
+      // Local Storage সম্পূর্ণ বন্ধ এবং ফাঁকা করে দিচ্ছি
       localStorage.removeItem('gen_ai_history');
       state.chatHistory = []; 
       
-      // Database থেকে ডাটা লোড করা
       fetch('/api/get_history')
         .then(res => res.json())
         .then(data => {
@@ -487,33 +489,60 @@
             state.chatHistory = data.history;
             renderSidebarHistory();
           } else {
-            // ডাটাবেসে কিছু না থাকলে ফাঁকা দেখাবে
-            renderSidebarHistory(); 
+            renderSidebarHistory();
           }
         })
         .catch(err => {
-          console.log("Could not load history from database");
+          console.error("History load error", err);
           renderSidebarHistory();
         });
     }
 
     
-        function saveChatHistory() { 
+           function saveChatHistory() { 
       try { 
-        // Local Storage এ সেভ করা বন্ধ করা হলো
-        // localStorage.setItem('gen_ai_history', JSON.stringify(state.chatHistory)); 
-        
-        // শুধু Database এ সেভ করা হচ্ছে
+        // Local Storage এ সেভ না করে সরাসরি Database এ পাঠাচ্ছি
         fetch('/api/save_history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ history: state.chatHistory })
         });
       } catch (e) {
-        console.error("Error saving history", e);
+        console.error("History save error", e);
       } 
     }
 
+
+
+        // এই ফাংশনটি প্রতি ৫ সেকেন্ডে ডাটাবেস থেকে নতুন ডাটা চেক করবে
+    // এটি "Live to Live" বা রিয়েল-টাইম অভিজ্ঞতা দেবে
+    function startAutoSync() {
+      setInterval(() => {
+        fetch('/api/get_history')
+          .then(res => res.json())
+          .then(data => {
+            if (JSON.stringify(data.history) !== JSON.stringify(state.chatHistory)) {
+               // যদি ডাটাবেসে ডাটা পরিবর্তন হয়ে থাকে (অন্য ডিভাইস থেকে চ্যাট করা হয়ে থাকে)
+               state.chatHistory = data.history || [];
+               renderSidebarHistory();
+               
+               // যদি বর্তমানে কোনো চ্যাট ওপেন থাকে, সেটাও আপডেট করা হলো
+               if (state.currentChatId) {
+                   const currentChat = state.chatHistory.find(c => c.id === state.currentChatId);
+                   if (currentChat && JSON.stringify(currentChat.messages) !== JSON.stringify(state.messages)) {
+                       state.messages = currentChat.messages || [];
+                       renderMessages();
+                       updateUI();
+                   }
+               }
+            }
+          });
+      }, 5000); // ৫ সেকেন্ড পর পর চেক করবে
+    }
+
+    // DOMContentLoaded এর মধ্যে এই ফাংশনটি কল করতে হবে
+    // নিচের লাইনটি DOMContentLoaded ফাংশনের শেষে যোগ করুন
+    // startAutoSync(); 
 
 
     
