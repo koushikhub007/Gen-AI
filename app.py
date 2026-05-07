@@ -137,30 +137,35 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-# --- Chat Route ---
+# --- Chat Route (Updated for GLM-5) ---
 
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
     data = request.json
     user_text = data.get('message')
-    model_key = data.get('model', 'glm-4-flash')
+    model_key = data.get('model', 'glm-5-turbo') # ডিফল্ট সবচেয়ে দ্রুত মডেল
 
     client = None
     model_id = None
 
-    # GLM Models Setup
-    if model_key == 'glm-4-flash':
+    # --- Zhipu AI New Models Mapping ---
+    if model_key == 'glm-5.1':
         if not zhipu_client: return jsonify({'reply': "Zhipu API Key missing"})
         client = zhipu_client
-        model_id = "glm-4-flash" # সঠিক Model ID
+        model_id = "glm-5.1" # সবচেয়ে শক্তিশালী ফ্ল্যাগশিপ
         
-    elif model_key == 'glm-4-air':
+    elif model_key == 'glm-5-turbo':
         if not zhipu_client: return jsonify({'reply': "Zhipu API Key missing"})
         client = zhipu_client
-        model_id = "glm-4-air"   # সঠিক Model ID
+        model_id = "glm-5-turbo" # দ্রুত এবং সাশ্রয়ী
         
-    # Llama Models Setup
+    elif model_key == 'glm-4.7-flash':
+        if not zhipu_client: return jsonify({'reply': "Zhipu API Key missing"})
+        client = zhipu_client
+        model_id = "glm-4.7-flash" # পুরনো ভার্সনের দ্রুত মডেল
+
+    # --- Groq Models (Llama) ---
     elif model_key == 'llama-70b':
         if not groq_client: return jsonify({'reply': "Groq API Key missing"})
         client = groq_client
@@ -172,9 +177,11 @@ def chat():
         model_id = "llama-3.1-8b-instant"
         
     else:
-        return jsonify({'reply': "Invalid Model Selection"})
+        # যদি কেউ অন্য কিছু পাঠায়
+        if not zhipu_client: return jsonify({'reply': "API Key missing"})
+        client = zhipu_client
+        model_id = "glm-5-turbo" 
 
-    # Safety check
     if client is None:
          return jsonify({'reply': "API Client not initialized"})
 
