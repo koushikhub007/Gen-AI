@@ -9,6 +9,7 @@ import uuid
 from urllib.parse import quote_plus
 
 app = Flask(__name__)
+# SECRET_KEY অবশ্যই Environment Variable এ দিতে হবে, না হলে রিস্টার্ট দিলে সেশন চলে যাবে
 app.secret_key = os.environ.get('SECRET_KEY', 'my_super_secret_key_123')
 
 # --- MongoDB Setup ---
@@ -31,10 +32,9 @@ try:
         client_db = MongoClient(MONGO_URI)
         db = client_db[DB_NAME]
         users_collection = db["users"]
-        history_collection = db["history"]
+        # History সেভ করার জন্য আলাদা collection
+        history_collection = db["user_histories"] 
         print("MongoDB Connected Successfully!")
-    else:
-        print("MongoDB credentials missing.")
 except Exception as e:
     print(f"MongoDB Connection Error: {e}")
 
@@ -46,8 +46,6 @@ if groq_key:
         base_url="https://api.groq.com/openai/v1",
         api_key=groq_key
     )
-else:
-    print("WARNING: GROQ_API_KEY is missing.")
 
 # --- Login Manager ---
 login_manager = LoginManager()
@@ -74,7 +72,6 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def index():
-    # এখানে index.html ব্যবহার করা হচ্ছে
     return render_template('index.html', username=current_user.username)
 
 @app.route('/login')
@@ -89,7 +86,8 @@ def api_login():
     user_doc = users_collection.find_one({'username': data.get('username')})
     if user_doc and check_password_hash(user_doc['password'], data.get('password')):
         u = User(user_doc)
-        login_user(u)
+        # 'remember=True' দিলে ব্রাউজার বন্ধ করলেও লগইন থাকবে
+        login_user(u, remember=True) 
         return jsonify({'success': True})
     return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
@@ -121,21 +119,51 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
+# --- Chat & History Routes ---
+
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
     if client is None:
-        return jsonify({'reply': "AI Service is not configured."})
+        return jsonify({'reply': "AI Service not configured."})
 
     data = request.json
+    user_text = data.get('message')
+    
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": data.get('message')}]
+            messages=[{"role": "user", "content": user_text}]
         )
-        return jsonify({'reply': response.choices[0].message.content})
+        bot_reply = response.choices[0].message.content
+
+        # ১. Message ডাটাবেসে সেভ করা হচ্ছে (ঐচ্ছিক, তবে ভবিষ্যতের জন্য ভালো)
+        # ২. এখানে আমরা History Sync API এর জন্য শুধু Chat করব, History Frontend থেকে আলাদাভাবে সেভ হবে
+        
+        return jsonify({'reply': bot_reply})
     except Exception as e:
-        return jsonify({'reply': f"AI Error: {str(e)}"})
+        return jsonify({'reply': f"Error: {str(e)}"})
+
+# History সেভ করার API
+@app.route('/api/save_history', methods=['POST'])
+@login_required
+def save_history():
+    data = request.json
+    # User ভিত্তিক History আপডেট করা
+    users_collection.update_one(
+        {'username': current_user.username},
+        {'$set': {'chat_history': data.get('history', [])}}
+    )
+    return jsonify({'success': True})
+
+# History লোড করার API
+@app.route('/api/get_history')
+@login_required
+def get_history():
+    user_doc = users_collection.find_one({'username': current_user.username})
+    if user_doc and 'chat_history' in user_doc:
+        return jsonify({'history': user_doc['chat_history']})
+    return jsonify({'history': []})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
