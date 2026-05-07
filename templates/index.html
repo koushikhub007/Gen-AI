@@ -387,25 +387,27 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
 
-                        <div class="model-dropdown" id="modelDropdown">
-              <!-- GLM Models (Documentation Correct Names) -->
-              <div class="model-option selected" data-model="glm-4-flash">
+                           <div class="model-dropdown" id="modelDropdown">
+              <!-- Latest GLM-5 Models -->
+              <div class="model-option selected" data-model="glm-5-turbo">
                 <div class="model-option-icon thinking"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
-                <div class="model-option-info"><h4>GLM-4 Flash</h4><p>Fast & Free</p></div>
+                <div class="model-option-info"><h4>GLM-5 Turbo</h4><p>Fast & Latest</p></div>
               </div>
-              <div class="model-option" data-model="glm-4-air">
+              <div class="model-option" data-model="glm-5.1">
                 <div class="model-option-icon pro"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
-                <div class="model-option-info"><h4>GLM-4 Air</h4><p>Advanced</p></div>
+                <div class="model-option-info"><h4>GLM-5.1</h4><p>Flagship Pro</p></div>
+              </div>
+
+              <!-- Standard Models -->
+              <div class="model-option" data-model="glm-4.7-flash">
+                <div class="model-option-icon thinking" style="background: linear-gradient(135deg, #10b981, #059669);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
+                <div class="model-option-info"><h4>GLM-4.7 Flash</h4><p>Older Fast</p></div>
               </div>
 
               <!-- Llama Models -->
               <div class="model-option" data-model="llama-70b">
-                <div class="model-option-icon thinking" style="background: linear-gradient(135deg, #10b981, #059669);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
-                <div class="model-option-info"><h4>Llama 3 70B</h4><p>Powerful (Groq)</p></div>
-              </div>
-              <div class="model-option" data-model="llama-8b">
                 <div class="model-option-icon pro" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
-                <div class="model-option-info"><h4>Llama 3 8B</h4><p>Super Fast (Groq)</p></div>
+                <div class="model-option-info"><h4>Llama 3 70B</h4><p>via Groq</p></div>
               </div>
             </div>
 
@@ -485,12 +487,12 @@
     // Updated Select Model Function
     function selectModel(modelId) {
       const models = {
-        'glm-4-flash': { id: 'glm-4-flash', name: 'GLM-4 Flash' },
-        'glm-4-air': { id: 'glm-4-air', name: 'GLM-4 Air' },
-        'llama-70b': { id: 'llama-70b', name: 'Llama 70B' },
-        'llama-8b': { id: 'llama-8b', name: 'Llama 8B' }
+        'glm-5-turbo': { id: 'glm-5-turbo', name: 'GLM-5 Turbo' },
+        'glm-5.1': { id: 'glm-5.1', name: 'GLM-5.1' },
+        'glm-4.7-flash': { id: 'glm-4.7-flash', name: 'GLM-4.7' },
+        'llama-70b': { id: 'llama-70b', name: 'Llama 70B' }
       };
-           state.currentModel = models[modelId] || models['glm-4-flash'];
+      state.currentModel = models[modelId] || models['glm-5-turbo'];
       if (dom.selectedModelName) dom.selectedModelName.textContent = state.currentModel.name;
       if (dom.modelDropdown) { const options = dom.modelDropdown.querySelectorAll('.model-option'); options.forEach(opt => { opt.classList.toggle('selected', opt.dataset.model === modelId); }); dom.modelDropdown.classList.remove('open'); }
       if (dom.modelBtn) dom.modelBtn.classList.remove('open');
