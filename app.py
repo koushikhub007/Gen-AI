@@ -13,7 +13,6 @@ from urllib.parse import quote_plus
 from cryptography.fernet import Fernet
 
 app = Flask(__name__)
-# SECRET_KEY অবশ্যই Environment Variable এ দিতে হবে
 app.secret_key = os.environ.get('SECRET_KEY', 'my_super_secret_key_123')
 
 # --- Encryption Setup ---
@@ -57,14 +56,38 @@ try:
 except Exception as e:
     print(f"MongoDB Connection Error: {e}")
 
-# --- Groq Setup ---
+# --- Multi-Model AI Setup ---
+# এখানে আপনি নতুন মডেল যোগ করতে পারবেন
+# প্রতিটি মডেলের জন্য আলাদা API Key লাগলে সেটি Environment Variable এ যোগ করতে হবে
+
+# API Clients Initialize
+zhipu_key = os.environ.get("ZHIPU_API_KEY")
 groq_key = os.environ.get("GROQ_API_KEY")
-client = None
+
+zhipu_client = None
+groq_client = None
+
+if zhipu_key:
+    zhipu_client = OpenAI(api_key=zhipu_key, base_url="https://open.bigmodel.cn/api/paas/v4/")
+    print("Zhipu AI Connected")
+
 if groq_key:
-    client = OpenAI(
-        base_url="https://api.groq.com/openai/v1",
-        api_key=groq_key
-    )
+    groq_client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
+    print("Groq AI Connected")
+
+# মডেলের তালিকা (আপনি এখানে নতুন মডেল যোগ করতে পারবেন)
+MODELS = {
+    # Zhipu AI Models
+    "glm-4": {"client": zhipu_client, "name": "GLM-4 (Pro)", "model_id": "glm-4"},
+    "glm-4-flash": {"client": zhipu_client, "name": "GLM-4 Flash", "model_id": "glm-4-flash"},
+    
+    # Groq Models (Llama)
+    "llama-70b": {"client": groq_client, "name": "Llama 3 70B", "model_id": "llama-3.3-70b-versatile"},
+    "llama-8b": {"client": groq_client, "name": "Llama 3 8B", "model_id": "llama-3.1-8b-instant"},
+    
+    # ভবিষ্যতে নতুন মডেল এখানে যোগ করুন
+    # "gpt-4": {"client": openai_client, "name": "GPT-4", "model_id": "gpt-4-turbo"},
+}
 
 # --- Login Manager ---
 login_manager = LoginManager()
@@ -138,28 +161,30 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-# --- Chat & Encrypted History Routes ---
+# --- Chat Route (Dynamic Model Selection) ---
 
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
-    if client is None:
-        return jsonify({'reply': "AI Service not configured."})
-
     data = request.json
     user_text = data.get('message')
-    model_type = data.get('model', 'thinking') # Frontend থেকে কোন মডেল এসেছে তা চেক করা
+    selected_model_key = data.get('model', 'glm-4-flash') # Default model
 
-    # মডেল সিলেকশন লজিক
-    # Pro হলে 70B মডেল, Thinking হলে 8B দ্রুত মডেল
-    if model_type == 'pro':
-        selected_model = "llama-3.3-70b-versatile" 
-    else:
-        selected_model = "llama-3.1-8b-instant" # এটি দ্রুত এবং ফ্রি
+    # মডেল কনফিগারেশন খুঁজে বের করা
+    model_config = MODELS.get(selected_model_key)
+
+    if not model_config:
+        return jsonify({'reply': "Model not found in configuration."})
+
+    client = model_config['client']
+    model_id = model_config['model_id']
+
+    if client is None:
+        return jsonify({'reply': f"API Key for this model is not configured."})
 
     try:
         response = client.chat.completions.create(
-            model=selected_model,
+            model=model_id,
             messages=[{"role": "user", "content": user_text}]
         )
         bot_reply = response.choices[0].message.content
