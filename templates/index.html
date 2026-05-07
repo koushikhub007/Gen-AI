@@ -474,8 +474,49 @@
       if (dom.modelBtn) dom.modelBtn.classList.remove('open');
     }
 
-    function loadChatHistory() { try { const saved = localStorage.getItem('gen_ai_history'); if (saved) { state.chatHistory = JSON.parse(saved); renderSidebarHistory(); } } catch (e) {} }
-    function saveChatHistory() { try { localStorage.setItem('gen_ai_history', JSON.stringify(state.chatHistory)); } catch (e) {} }
+        function loadChatHistory() { 
+      // পুরানো Local Storage এর ডাটা মুছে ফেলা হলো যাতে অন্য ইউজারের ডাটা না দেখায়
+      localStorage.removeItem('gen_ai_history');
+      state.chatHistory = []; 
+      
+      // Database থেকে ডাটা লোড করা
+      fetch('/api/get_history')
+        .then(res => res.json())
+        .then(data => {
+          if(data.history && data.history.length > 0) {
+            state.chatHistory = data.history;
+            renderSidebarHistory();
+          } else {
+            // ডাটাবেসে কিছু না থাকলে ফাঁকা দেখাবে
+            renderSidebarHistory(); 
+          }
+        })
+        .catch(err => {
+          console.log("Could not load history from database");
+          renderSidebarHistory();
+        });
+    }
+
+    
+        function saveChatHistory() { 
+      try { 
+        // Local Storage এ সেভ করা বন্ধ করা হলো
+        // localStorage.setItem('gen_ai_history', JSON.stringify(state.chatHistory)); 
+        
+        // শুধু Database এ সেভ করা হচ্ছে
+        fetch('/api/save_history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ history: state.chatHistory })
+        });
+      } catch (e) {
+        console.error("Error saving history", e);
+      } 
+    }
+
+
+
+    
     function renderSidebarHistory() {
       if (!dom.sidebarHistoryList) return;
       if (state.chatHistory.length === 0) { dom.sidebarHistoryList.innerHTML = '<p style="padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center;">No history</p>'; return; }
