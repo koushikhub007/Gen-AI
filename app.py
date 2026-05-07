@@ -56,37 +56,34 @@ try:
 except Exception as e:
     print(f"MongoDB Connection Error: {e}")
 
-# --- Multi-Model AI Setup ---
-# এখানে আপনি নতুন মডেল যোগ করতে পারবেন
-# প্রতিটি মডেলের জন্য আলাদা API Key লাগলে সেটি Environment Variable এ যোগ করতে হবে
-
-# API Clients Initialize
-zhipu_key = os.environ.get("ZHIPU_API_KEY")
-groq_key = os.environ.get("GROQ_API_KEY")
-
+# --- Zhipu AI (GLM) Setup ---
+ZHIPU_KEY = os.environ.get("ZHIPU_API_KEY")
 zhipu_client = None
+
+if ZHIPU_KEY:
+    zhipu_client = OpenAI(
+        api_key=ZHIPU_KEY,
+        base_url="https://open.bigmodel.cn/api/paas/v4/"
+    )
+    print("Zhipu AI Configured!")
+
+# --- Groq Setup ---
+GROQ_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = None
+if GROQ_KEY:
+    groq_client = OpenAI(api_key=GROQ_KEY, base_url="https://api.groq.com/openai/v1")
 
-if zhipu_key:
-    zhipu_client = OpenAI(api_key=zhipu_key, base_url="https://open.bigmodel.cn/api/paas/v4/")
-    print("Zhipu AI Connected")
-
-if groq_key:
-    groq_client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
-    print("Groq AI Connected")
-
-# মডেলের তালিকা (আপনি এখানে নতুন মডেল যোগ করতে পারবেন)
+# --- Model Configuration ---
+# এখানে সঠিক Model ID দিয়ে দিতে হবে।
+# Zhipu এর ক্ষেত্রে সাধারণত নিচের নামগুলো কাজ করে
 MODELS = {
-    # Zhipu AI Models
-    "glm-4": {"client": zhipu_client, "name": "GLM-4 (Pro)", "model_id": "glm-4"},
-    "glm-4-flash": {"client": zhipu_client, "name": "GLM-4 Flash", "model_id": "glm-4-flash"},
+    # Zhipu AI Models (সঠিক নাম বসানো হয়েছে)
+    "glm-4-air": {"client": zhipu_client, "name": "GLM-4 Air", "model_id": "glm-4-air"},      # দ্রুত এবং সস্তা (Thinking এর জন্য)
+    "glm-4": {"client": zhipu_client, "name": "GLM-4 Pro", "model_id": "glm-4"},            # শক্তিশালী (Pro এর জন্য)
     
     # Groq Models (Llama)
     "llama-70b": {"client": groq_client, "name": "Llama 3 70B", "model_id": "llama-3.3-70b-versatile"},
     "llama-8b": {"client": groq_client, "name": "Llama 3 8B", "model_id": "llama-3.1-8b-instant"},
-    
-    # ভবিষ্যতে নতুন মডেল এখানে যোগ করুন
-    # "gpt-4": {"client": openai_client, "name": "GPT-4", "model_id": "gpt-4-turbo"},
 }
 
 # --- Login Manager ---
@@ -161,26 +158,25 @@ def logout():
     logout_user()
     return redirect(url_for('login_page'))
 
-# --- Chat Route (Dynamic Model Selection) ---
+# --- Chat Route ---
 
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
     data = request.json
     user_text = data.get('message')
-    selected_model_key = data.get('model', 'glm-4-flash') # Default model
+    selected_model_key = data.get('model', 'glm-4-air') # Default মডেল
 
-    # মডেল কনফিগারেশন খুঁজে বের করা
     model_config = MODELS.get(selected_model_key)
 
     if not model_config:
-        return jsonify({'reply': "Model not found in configuration."})
+        return jsonify({'reply': "Model configuration not found."})
 
     client = model_config['client']
     model_id = model_config['model_id']
 
     if client is None:
-        return jsonify({'reply': f"API Key for this model is not configured."})
+        return jsonify({'reply': f"API Key for {model_config['name']} is missing."})
 
     try:
         response = client.chat.completions.create(
@@ -190,7 +186,10 @@ def chat():
         bot_reply = response.choices[0].message.content
         return jsonify({'reply': bot_reply})
     except Exception as e:
-        return jsonify({'reply': f"Error: {str(e)}"})
+        # এরর মেসেজটি আরও স্পষ্ট করা হলো
+        error_msg = str(e)
+        print(f"API Error: {error_msg}")
+        return jsonify({'reply': f"API Error: {error_msg}"})
 
 @app.route('/api/save_history', methods=['POST'])
 @login_required
