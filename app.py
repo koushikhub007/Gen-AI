@@ -10,7 +10,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
 import uuid
 from urllib.parse import quote_plus
-# Encryption এর জন্য import
 from cryptography.fernet import Fernet
 
 app = Flask(__name__)
@@ -18,25 +17,22 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'my_super_secret_key_123')
 
 # --- Encryption Setup ---
-# SECRET_KEY ব্যবহার করে একটি Encryption Key তৈরি করা হচ্ছে
 key_bytes = hashlib.sha256(app.secret_key.encode()).digest()
 cipher_key = base64.urlsafe_b64encode(key_bytes)
 cipher_suite = Fernet(cipher_key)
 
 def encrypt_data(data):
-    """ডাটা এনক্রিপ্ট করার ফাংশন"""
     if not data: return ""
     json_str = json.dumps(data)
     return cipher_suite.encrypt(json_str.encode()).decode()
 
 def decrypt_data(encrypted_data):
-    """ডাটা ডিক্রিপ্ট করার ফাংশন"""
     if not encrypted_data: return []
     try:
         json_str = cipher_suite.decrypt(encrypted_data.encode()).decode()
         return json.loads(json_str)
     except:
-        return [] # পুরনো ডাটা থাকলে বা এরর হলে ফাঁকা রিটার্ন করবে
+        return []
 
 # --- MongoDB Setup ---
 MONGO_USER = os.environ.get("MONGO_USER")
@@ -132,7 +128,7 @@ def api_signup():
         '_id': user_id,
         'username': username,
         'password': generate_password_hash(password),
-        'encrypted_history': "" # নতুন ফিল্ড
+        'encrypted_history': ""
     })
     return jsonify({'success': True})
 
@@ -152,10 +148,18 @@ def chat():
 
     data = request.json
     user_text = data.get('message')
-    
+    model_type = data.get('model', 'thinking') # Frontend থেকে কোন মডেল এসেছে তা চেক করা
+
+    # মডেল সিলেকশন লজিক
+    # Pro হলে 70B মডেল, Thinking হলে 8B দ্রুত মডেল
+    if model_type == 'pro':
+        selected_model = "llama-3.3-70b-versatile" 
+    else:
+        selected_model = "llama-3.1-8b-instant" # এটি দ্রুত এবং ফ্রি
+
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=selected_model,
             messages=[{"role": "user", "content": user_text}]
         )
         bot_reply = response.choices[0].message.content
@@ -163,14 +167,11 @@ def chat():
     except Exception as e:
         return jsonify({'reply': f"Error: {str(e)}"})
 
-# History সেভ করার API (Encrypted)
 @app.route('/api/save_history', methods=['POST'])
 @login_required
 def save_history():
     data = request.json
     history_list = data.get('history', [])
-    
-    # ডাটা এনক্রিপ্ট করে সেভ করা হচ্ছে
     encrypted_string = encrypt_data(history_list)
     
     users_collection.update_one(
@@ -179,13 +180,11 @@ def save_history():
     )
     return jsonify({'success': True})
 
-# History লোড করার API (Decrypted)
 @app.route('/api/get_history')
 @login_required
 def get_history():
     user_doc = users_collection.find_one({'username': current_user.username})
     if user_doc and 'encrypted_history' in user_doc:
-        # ডাটা ডিক্রিপ্ট করে ফেরত পাঠানো হচ্ছে
         encrypted_string = user_doc['encrypted_history']
         decrypted_list = decrypt_data(encrypted_string)
         return jsonify({'history': decrypted_list})
